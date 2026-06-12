@@ -1,0 +1,26 @@
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Frontend
+node_modules/
+dist/
+
+# Backend
+target/
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+application.yml
+application-*.yml
+!application-example.yml
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

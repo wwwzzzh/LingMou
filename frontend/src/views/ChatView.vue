@@ -2,6 +2,7 @@
 import { ref, watch, nextTick, onMounted } from 'vue'
 import { useChatStore } from '@/stores/chat'
 import { useUserStore } from '@/stores/user'
+import { useAppStore } from '@/stores/app'
 import { generateId } from '@/utils'
 import { mockChatReply } from '@/api/modules/chat.mock'
 import type { ChatMessage } from '@/types'
@@ -10,6 +11,7 @@ import ChatInput from '@/components/ChatInput.vue'
 
 const chatStore = useChatStore()
 const userStore = useUserStore()
+const appStore = useAppStore()
 
 /** 聊天容器引用（用于自动滚动） */
 const chatContainerRef = ref<HTMLElement | null>(null)
@@ -44,6 +46,8 @@ async function scrollToBottom(): Promise<void> {
  * 发送消息
  */
 async function handleSend(content: string): Promise<void> {
+  const doneLoading = appStore.startLoading()
+
   // 构造用户消息
   const userMessage: ChatMessage = {
     id: generateId(),
@@ -53,24 +57,19 @@ async function handleSend(content: string): Promise<void> {
     timestamp: Date.now(),
   }
 
-  // 添加到消息列表
   chatStore.addMessage(userMessage)
   await scrollToBottom()
 
-  // 设置 AI 加载状态
   chatStore.setLoading(true)
 
   try {
-    // 调用 Mock API（后续替换为真实 chatApi.sendMessage）
     const reply = await mockChatReply(
       userStore.sessionId || 'anonymous',
       content,
       [],
     )
-
     chatStore.addMessage(reply)
   } catch {
-    // 错误时添加系统提示
     chatStore.addMessage({
       id: generateId(),
       role: 'assistant',
@@ -78,8 +77,10 @@ async function handleSend(content: string): Promise<void> {
       type: 'text',
       timestamp: Date.now(),
     })
+    appStore.setError('消息发送失败，请检查网络连接')
   } finally {
     chatStore.setLoading(false)
+    doneLoading()
     await scrollToBottom()
   }
 }

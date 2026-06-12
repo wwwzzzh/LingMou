@@ -38,28 +38,28 @@ function goToMediaPreview(): void {
       <h3 class="features__title">核心能力</h3>
       <el-row :gutter="24">
         <el-col :xs="24" :sm="12" :lg="6">
-          <div class="feature-card">
+          <div class="feature-card" @click="goToMediaPreview">
             <div class="feature-card__icon">📷</div>
             <h4 class="feature-card__title">实时视觉采集</h4>
             <p class="feature-card__desc">摄像头实时画面采集，Canvas 智能抽帧</p>
           </div>
         </el-col>
         <el-col :xs="24" :sm="12" :lg="6">
-          <div class="feature-card">
+          <div class="feature-card" @click="goToMediaPreview">
             <div class="feature-card__icon">🎙️</div>
             <h4 class="feature-card__title">语音交互</h4>
             <p class="feature-card__desc">VAD 语音活动检测，端侧成本控制</p>
           </div>
         </el-col>
         <el-col :xs="24" :sm="12" :lg="6">
-          <div class="feature-card">
+          <div class="feature-card" @click="goToChat">
             <div class="feature-card__icon">🧠</div>
             <h4 class="feature-card__title">多模态理解</h4>
             <p class="feature-card__desc">视觉+文本多模态大模型驱动</p>
           </div>
         </el-col>
         <el-col :xs="24" :sm="12" :lg="6">
-          <div class="feature-card">
+          <div class="feature-card" @click="goToChat">
             <div class="feature-card__icon">🗣️</div>
             <h4 class="feature-card__title">语音合成</h4>
             <p class="feature-card__desc">TTS 语音回复，自然对话体验</p>
@@ -125,6 +125,7 @@ function goToMediaPreview(): void {
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
   transition: transform 0.2s, box-shadow 0.2s;
   margin-bottom: 16px;
+  cursor: pointer;
 
   &:hover {
     transform: translateY(-4px);
@@ -151,18 +152,53 @@ function goToMediaPreview(): void {
 }
 
 // 响应式
+// 1280
+@media (max-width: $breakpoint-md) {
+  .hero {
+    padding: 60px 20px 48px;
+
+    &__title { font-size: 30px; }
+  }
+}
+
+// 768 平板
 @media (max-width: $breakpoint-sm) {
   .hero {
     padding: 40px 16px 32px;
 
-    &__title {
-      font-size: 24px;
-    }
+    &__title { font-size: 24px; }
+    &__description { font-size: 14px; }
 
     &__actions {
       flex-direction: column;
       align-items: center;
     }
+  }
+
+  .features__title { font-size: 20px; }
+}
+
+// 375 手机
+@media (max-width: $breakpoint-xs) {
+  .hero {
+    padding: 32px 12px 24px;
+
+    &__title { font-size: 20px; }
+    &__description { font-size: 13px; }
+  }
+
+  .features {
+    padding: 24px 0 48px;
+
+    &__title { font-size: 18px; margin-bottom: 24px; }
+  }
+
+  .feature-card {
+    padding: 20px 16px;
+
+    &__icon { font-size: 32px; }
+    &__title { font-size: 14px; }
+    &__desc { font-size: 12px; }
   }
 }
 </style>

@@ -1,5 +1,11 @@
 <script setup lang="ts">
-// router 导入预留 — 后续页面导航使用
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+
+function goToMediaPreview(): void {
+  router.push('/media-preview')
+}
 </script>
 
 <template>
@@ -13,7 +19,7 @@
           支持摄像头采集、语音交互、智能图片分析，让 AI 真正"看懂"你的世界。
         </p>
         <div class="hero__actions">
-          <el-button type="primary" size="large" round>
+          <el-button type="primary" size="large" round @click="goToMediaPreview">
             开始使用
           </el-button>
           <el-button size="large" round>

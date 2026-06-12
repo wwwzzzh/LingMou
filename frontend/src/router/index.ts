@@ -10,6 +10,14 @@ const routes: RouteRecordRaw[] = [
       title: '首页',
     },
   },
+  {
+    path: '/media-preview',
+    name: 'MediaPreview',
+    component: () => import('@/views/MediaPreviewView.vue'),
+    meta: {
+      title: '音视频采集预览',
+    },
+  },
 ]
 
 const router = createRouter({

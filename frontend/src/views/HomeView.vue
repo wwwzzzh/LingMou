@@ -3,6 +3,10 @@ import { useRouter } from 'vue-router'
 
 const router = useRouter()
 
+function goToChat(): void {
+  router.push('/chat')
+}
+
 function goToMediaPreview(): void {
   router.push('/media-preview')
 }
@@ -19,11 +23,11 @@ function goToMediaPreview(): void {
           支持摄像头采集、语音交互、智能图片分析，让 AI 真正"看懂"你的世界。
         </p>
         <div class="hero__actions">
-          <el-button type="primary" size="large" round @click="goToMediaPreview">
-            开始使用
+          <el-button type="primary" size="large" round @click="goToChat">
+            💬 开始对话
           </el-button>
-          <el-button size="large" round>
-            了解更多
+          <el-button size="large" round @click="goToMediaPreview">
+            📷 设备预览
           </el-button>
         </div>
       </div>

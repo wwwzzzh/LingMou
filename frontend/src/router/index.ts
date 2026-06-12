@@ -18,6 +18,14 @@ const routes: RouteRecordRaw[] = [
       title: '音视频采集预览',
     },
   },
+  {
+    path: '/chat',
+    name: 'Chat',
+    component: () => import('@/views/ChatView.vue'),
+    meta: {
+      title: '智能对话',
+    },
+  },
 ]
 
 const router = createRouter({

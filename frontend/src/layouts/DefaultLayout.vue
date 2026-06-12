@@ -49,12 +49,40 @@ const pageTitle = computed(() => route.meta.title || 'AI 视觉对话助手')
 
   &__inner {
     width: 100%;
-    max-width: 1440px;
     margin: 0 auto;
-    padding: 0 24px;
+    padding: 0 32px;
     display: flex;
     align-items: center;
     gap: 16px;
+
+    // 1920: 宽屏大桌面
+    @media (min-width: $breakpoint-xl) {
+      max-width: 1600px;
+      padding: 0 40px;
+    }
+
+    // 1440: 标准桌面
+    @media (max-width: $breakpoint-lg) {
+      max-width: 1280px;
+      padding: 0 28px;
+    }
+
+    // 1280: 小桌面
+    @media (max-width: $breakpoint-md) {
+      padding: 0 20px;
+    }
+
+    // 768: 平板
+    @media (max-width: $breakpoint-sm) {
+      padding: 0 16px;
+      gap: 10px;
+    }
+
+    // 375: 手机
+    @media (max-width: $breakpoint-xs) {
+      padding: 0 12px;
+      gap: 8px;
+    }
   }
 
   &__title {
@@ -62,6 +90,14 @@ const pageTitle = computed(() => route.meta.title || 'AI 视觉对话助手')
     font-weight: 600;
     color: $text-primary;
     letter-spacing: 0.5px;
+
+    @media (max-width: $breakpoint-sm) {
+      font-size: 16px;
+    }
+
+    @media (max-width: $breakpoint-xs) {
+      font-size: 14px;
+    }
   }
 
   &__subtitle {
@@ -69,15 +105,45 @@ const pageTitle = computed(() => route.meta.title || 'AI 视觉对话助手')
     color: $text-secondary;
     padding-left: 16px;
     border-left: 1px solid $border-color-light;
+
+    @media (max-width: $breakpoint-xs) {
+      display: none;
+    }
   }
 }
 
 .app-main {
   flex: 1;
   width: 100%;
-  max-width: 1440px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 32px;
+
+  // 1920
+  @media (min-width: $breakpoint-xl) {
+    max-width: 1600px;
+    padding: 40px;
+  }
+
+  // 1440
+  @media (max-width: $breakpoint-lg) {
+    max-width: 1280px;
+    padding: 28px;
+  }
+
+  // 1280
+  @media (max-width: $breakpoint-md) {
+    padding: 20px;
+  }
+
+  // 768
+  @media (max-width: $breakpoint-sm) {
+    padding: 16px;
+  }
+
+  // 375
+  @media (max-width: $breakpoint-xs) {
+    padding: 12px;
+  }
 }
 
 .app-footer {
@@ -86,5 +152,10 @@ const pageTitle = computed(() => route.meta.title || 'AI 视觉对话助手')
   font-size: 12px;
   color: $text-placeholder;
   border-top: 1px solid $border-color-light;
+
+  @media (max-width: $breakpoint-xs) {
+    padding: 12px 8px;
+    font-size: 11px;
+  }
 }
 </style>

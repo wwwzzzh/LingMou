@@ -77,6 +77,12 @@ function handleRetry(): void {
 onBeforeUnmount(() => {
   stopDevice()
 })
+
+// 暴露 videoRef 供帧捕获使用
+defineExpose({
+  videoRef,
+  stream,
+})
 </script>
 
 <template>

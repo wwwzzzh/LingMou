@@ -27,6 +27,20 @@ $border-color-light: #e4e7ed;
 $bg-color: #f5f7fa;
 $bg-color-white: #ffffff;
 
+// ==========================================
+// 暗色主题变量（企业级深色模式）
+// ==========================================
+$dark-bg-primary: #0f1119;
+$dark-bg-secondary: #181b26;
+$dark-bg-tertiary: #1e2130;
+$dark-border: rgba(255, 255, 255, 0.06);
+$dark-border-active: rgba(255, 255, 255, 0.12);
+$dark-text-primary: #e2e8f0;
+$dark-text-secondary: rgba(148, 163, 184, 0.7);
+$dark-text-dim: rgba(148, 163, 184, 0.4);
+$dark-accent: #6366f1;
+$dark-accent-light: #818cf8;
+
 // 布局
 $sidebar-width: 260px;
 $header-height: 60px;
@@ -37,3 +51,4 @@ $breakpoint-lg: 1440px;
 $breakpoint-md: 1280px;
 $breakpoint-sm: 768px;
 $breakpoint-xs: 375px;
+$breakpoint-tablet: 1024px;

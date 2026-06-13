@@ -1,40 +1,60 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted } from 'vue'
+import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { VideoPause, VideoPlay, Microphone, Promotion } from '@element-plus/icons-vue'
 import { useChatStore } from '@/stores/chat'
 import { useUserStore } from '@/stores/user'
 import { useAppStore } from '@/stores/app'
-import { generateId } from '@/utils'
+import { useMediaDevice } from '@/composables/useMediaDevice'
+import { generateId, formatTime } from '@/utils'
 import { mockChatReply } from '@/api/modules/chat.mock'
 import type { ChatMessage } from '@/types'
-import MessageBubble from '@/components/MessageBubble.vue'
-import ChatInput from '@/components/ChatInput.vue'
 
+// ==================== Stores ====================
 const chatStore = useChatStore()
 const userStore = useUserStore()
 const appStore = useAppStore()
 
-/** 聊天容器引用（用于自动滚动） */
-const chatContainerRef = ref<HTMLElement | null>(null)
+// ==================== 媒体设备 ====================
+const {
+  stream,
+  cameraEnabled,
+  micEnabled,
+  error: _deviceError,
+  startDevice,
+  toggleCamera,
+  toggleMic,
+  stopDevice,
+} = useMediaDevice()
 
-/** 欢迎消息 */
+const videoRef = ref<HTMLVideoElement | null>(null)
+const isCameraReady = ref(false)
+
+watch(stream, (newStream) => {
+  if (videoRef.value) {
+    videoRef.value.srcObject = newStream
+    isCameraReady.value = !!newStream
+  }
+})
+
+// ==================== 聊天 ====================
+const chatContainerRef = ref<HTMLElement | null>(null)
+const inputText = ref('')
+const systemStatus = ref<'idle' | 'listening' | 'recognizing' | 'thinking' | 'replying'>('idle')
+
 const WELCOME_MESSAGE: ChatMessage = {
   id: 'welcome',
   role: 'assistant',
-  content: '你好！我是 AI 视觉对话助手 👋\n我可以实时查看你的摄像头画面，并回答你的任何问题。点击"开始使用"即可开启视觉对话体验。',
+  content: '你好！我是灵眸AI 👋\n开启摄像头和麦克风后，我可以实时看到你的画面并回答你的问题。',
   type: 'text',
   timestamp: Date.now(),
 }
 
 onMounted(() => {
-  // 若无消息则显示欢迎语
   if (chatStore.messages.length === 0) {
     chatStore.addMessage(WELCOME_MESSAGE)
   }
 })
 
-/**
- * 滚动到底部
- */
 async function scrollToBottom(): Promise<void> {
   await nextTick()
   if (chatContainerRef.value) {
@@ -42,32 +62,31 @@ async function scrollToBottom(): Promise<void> {
   }
 }
 
-/**
- * 发送消息
- */
-async function handleSend(content: string): Promise<void> {
-  const doneLoading = appStore.startLoading()
+async function handleSend(): Promise<void> {
+  const text = inputText.value.trim()
+  if (!text) return
 
-  // 构造用户消息
   const userMessage: ChatMessage = {
     id: generateId(),
     role: 'user',
-    content,
+    content: text,
     type: 'text',
     timestamp: Date.now(),
   }
 
   chatStore.addMessage(userMessage)
+  inputText.value = ''
   await scrollToBottom()
 
+  // 模拟 ASR → AI 流程
+  systemStatus.value = 'thinking'
   chatStore.setLoading(true)
+  const doneLoading = appStore.startLoading()
 
   try {
-    const reply = await mockChatReply(
-      userStore.sessionId || 'anonymous',
-      content,
-      [],
-    )
+    const reply = await mockChatReply(userStore.sessionId || 'anonymous', text, [])
+    systemStatus.value = 'replying'
+    await new Promise(r => setTimeout(r, 400)) // 短暂显示"回复中"
     chatStore.addMessage(reply)
   } catch {
     chatStore.addMessage({
@@ -77,165 +96,462 @@ async function handleSend(content: string): Promise<void> {
       type: 'text',
       timestamp: Date.now(),
     })
-    appStore.setError('消息发送失败，请检查网络连接')
   } finally {
     chatStore.setLoading(false)
     doneLoading()
+    systemStatus.value = 'idle'
     await scrollToBottom()
   }
 }
 
-/**
- * 清空对话
- */
-function handleClear(): void {
-  chatStore.clearMessages()
-  chatStore.addMessage(WELCOME_MESSAGE)
-  scrollToBottom()
+function handleKeydown(e: KeyboardEvent): void {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    handleSend()
+  }
 }
 
-// 监听消息列表变化自动滚动
-watch(
-  () => chatStore.messages.length,
-  () => {
-    scrollToBottom()
-  },
-)
+// 摄像头控制
+async function handleToggleCamera(): Promise<void> {
+  if (!cameraEnabled.value) await startDevice()
+  else toggleCamera()
+}
+
+function handleToggleMic(): void {
+  toggleMic()
+}
+
+// 状态文字
+const statusText: Record<string, string> = {
+  idle: '',
+  listening: '正在聆听...',
+  recognizing: '正在识别语音...',
+  thinking: 'AI 正在思考...',
+  replying: 'AI 正在回复...',
+}
+
+const statusDots = ref([false, false, false])
+let statusInterval: ReturnType<typeof setInterval> | null = null
+
+watch(systemStatus, (val) => {
+  if (val === 'thinking' || val === 'replying') {
+    let i = 0
+    statusInterval = setInterval(() => {
+      statusDots.value = [false, false, false]
+      statusDots.value[i % 3] = true
+      i++
+    }, 300)
+  } else {
+    if (statusInterval) { clearInterval(statusInterval); statusInterval = null }
+    statusDots.value = [false, false, false]
+  }
+})
+
+// 当前时间
+const currentTime = ref('')
+let timeInterval: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  currentTime.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+  timeInterval = setInterval(() => {
+    currentTime.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+  }, 1000)
+})
+onBeforeUnmount(() => {
+  stopDevice()
+  if (timeInterval) clearInterval(timeInterval)
+  if (statusInterval) clearInterval(statusInterval)
+})
 </script>
 
 <template>
-  <div class="chat-view">
-    <!-- 顶部工具栏 -->
-    <div class="chat-view__toolbar">
-      <h2 class="chat-view__title">💬 智能对话</h2>
-      <el-button text size="small" @click="handleClear">
-        清空对话
-      </el-button>
-    </div>
+  <div class="chat-layout">
+    <!-- ========== 左侧：视觉区域 (75%) ========== -->
+    <div class="visual-panel">
+      <!-- 顶部状态栏 -->
+      <div class="visual-panel__top-bar">
+        <div class="status-dot" :class="{ 'is-active': cameraEnabled }" />
+        <span class="status-label">{{ cameraEnabled ? '摄像头已开启' : '摄像头未开启' }}</span>
+        <span class="status-time">{{ currentTime }}</span>
+      </div>
 
-    <!-- 消息列表区域 -->
-    <div ref="chatContainerRef" class="chat-view__messages">
-      <TransitionGroup name="msg">
-        <MessageBubble
-          v-for="message in chatStore.messages"
-          :key="message.id"
-          :message="message"
+      <!-- 摄像头画面 -->
+      <div class="visual-panel__video-wrapper">
+        <video
+          v-show="cameraEnabled && stream"
+          ref="videoRef"
+          class="visual-panel__video"
+          autoplay
+          playsinline
+          muted
         />
-      </TransitionGroup>
-
-      <!-- AI 加载状态 -->
-      <div v-if="chatStore.isLoading" class="chat-view__loading">
-        <div class="loading-indicator">
-          <span class="loading-indicator__dot" />
-          <span class="loading-indicator__dot" />
-          <span class="loading-indicator__dot" />
+        <!-- 摄像头关闭占位 -->
+        <div v-if="!cameraEnabled || !stream" class="visual-panel__placeholder">
+          <el-icon :size="72" color="rgba(148,163,184,0.3)"><VideoPause /></el-icon>
+          <p class="visual-panel__placeholder-text">摄像头未开启</p>
+          <el-button type="primary" size="large" round @click="handleToggleCamera">
+            开启摄像头
+          </el-button>
         </div>
-        <span class="loading-indicator__text">AI 正在思考...</span>
+      </div>
+
+      <!-- 底部控制栏 -->
+      <div class="visual-panel__controls">
+        <el-tooltip content="开启摄像头" placement="top">
+          <button class="ctrl-btn" :class="{ 'is-active': cameraEnabled }" @click="handleToggleCamera">
+            <el-icon :size="18"><VideoPlay v-if="!cameraEnabled" /><VideoPause v-else /></el-icon>
+          </button>
+        </el-tooltip>
+        <el-tooltip content="关闭摄像头" placement="top">
+          <button class="ctrl-btn ctrl-btn--danger" @click="toggleCamera">
+            <el-icon :size="18"><VideoPause /></el-icon>
+          </button>
+        </el-tooltip>
+        <el-tooltip content="开启麦克风" placement="top">
+          <button class="ctrl-btn" :class="{ 'is-active': micEnabled }" @click="handleToggleMic">
+            <el-icon :size="18"><Microphone /></el-icon>
+          </button>
+        </el-tooltip>
+        <el-tooltip content="关闭麦克风" placement="top">
+          <button class="ctrl-btn ctrl-btn--danger" @click="toggleMic">
+            <el-icon :size="18"><Promotion /></el-icon>
+          </button>
+        </el-tooltip>
       </div>
     </div>
 
-    <!-- 输入区域 -->
-    <div class="chat-view__input">
-      <ChatInput @send="handleSend" />
+    <!-- ========== 右侧：聊天区域 (25%) ========== -->
+    <div class="chat-panel">
+      <!-- 顶部品牌 -->
+      <div class="chat-panel__header">
+        <div class="chat-panel__brand">
+          <span class="brand-icon">👁️</span>
+          <span class="brand-name">灵眸AI</span>
+        </div>
+        <div class="chat-panel__status-row">
+          <span class="online-dot" />
+          <span class="online-text">在线</span>
+        </div>
+        <p class="chat-panel__subtitle">视觉对话助手</p>
+      </div>
+
+      <!-- 消息区域 -->
+      <div ref="chatContainerRef" class="chat-panel__messages">
+        <TransitionGroup name="msg">
+          <div
+            v-for="msg in chatStore.messages"
+            :key="msg.id"
+            class="chat-msg"
+            :class="{ 'chat-msg--user': msg.role === 'user', 'chat-msg--ai': msg.role === 'assistant' }"
+          >
+            <div class="chat-msg__bubble">
+              <p class="chat-msg__text">{{ msg.content }}</p>
+              <span class="chat-msg__time">{{ formatTime(msg.timestamp) }}</span>
+            </div>
+          </div>
+        </TransitionGroup>
+
+        <!-- Loading -->
+        <div v-if="chatStore.isLoading" class="chat-msg chat-msg--ai">
+          <div class="chat-msg__bubble chat-msg__bubble--loading">
+            <span class="loading-dot" v-for="i in 3" :key="i" :class="{ 'is-lit': statusDots[i-1] }" />
+          </div>
+        </div>
+      </div>
+
+      <!-- 状态提示 -->
+      <div v-if="systemStatus !== 'idle'" class="chat-panel__status">
+        <span class="chat-panel__status-dot" :class="{ 'is-active': statusDots[0] }" />
+        <span>{{ statusText[systemStatus] }}</span>
+      </div>
+
+      <!-- 输入区域 -->
+      <div class="chat-panel__input-area">
+        <div class="chat-input-row">
+          <input
+            v-model="inputText"
+            class="chat-input-field"
+            placeholder="输入消息..."
+            @keydown="handleKeydown"
+          />
+          <button class="chat-send-btn" :class="{ 'is-ready': inputText.trim() }" @click="handleSend">
+            <el-icon :size="18"><Promotion /></el-icon>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <style lang="scss" scoped>
-.chat-view {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - $header-height - 48px - 32px);
-  max-width: 900px;
-  margin: 0 auto;
+// ==========================================
+// 灵眸AI 对话页面 — 企业级 75/25 分栏
+// ==========================================
 
-  // 工具栏
-  &__toolbar {
+$panel-bg: #0f1119;
+$card-bg: #181b26;
+$border-subtle: rgba(255, 255, 255, 0.06);
+$text-dim: rgba(148, 163, 184, 0.6);
+$text-bright: #e2e8f0;
+$accent: #6366f1;
+
+.chat-layout {
+  display: flex;
+  height: 100vh;
+  background: $panel-bg;
+  overflow: hidden;
+}
+
+// ========== 左侧视觉面板 ==========
+.visual-panel {
+  flex: 0 0 75%;
+  position: relative;
+  background: #0a0c16;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  // 顶部状态栏
+  &__top-bar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding-bottom: 16px;
-    border-bottom: 1px solid $border-color-light;
+    gap: 10px;
+    padding: 14px 24px;
+    background: linear-gradient(180deg, rgba(0,0,0,0.5) 0%, transparent 100%);
+    z-index: 10;
   }
 
-  &__title {
-    font-size: 20px;
-    font-weight: 600;
-    color: $text-primary;
+  // 摄像头画面
+  &__video-wrapper {
+    width: calc(100% - 48px);
+    height: calc(100% - 48px);
+    margin: 24px;
+    border-radius: 20px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.04),
+                0 25px 80px rgba(0,0,0,0.5),
+                inset 0 1px 0 rgba(255,255,255,0.03);
+    position: relative;
+    background: #0d0f17;
   }
+
+  &__video {
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
+
+  &__placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+  }
+
+  &__placeholder-text {
+    font-size: 15px;
+    color: $text-dim;
+  }
+
+  // 底部控制栏
+  &__controls {
+    position: absolute;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    padding: 10px 20px;
+    background: rgba(24, 27, 38, 0.85);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 100px;
+    z-index: 10;
+  }
+}
+
+// 状态指示
+.status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(248, 113, 113, 0.6);
+  &.is-active {
+    background: #22c55e;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+  }
+}
+.status-label { font-size: 12px; color: $text-dim; }
+.status-time { margin-left: auto; font-size: 13px; color: $text-bright; font-variant-numeric: tabular-nums; }
+
+// 控制按钮
+.ctrl-btn {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  color: rgba(255,255,255,0.6);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s ease;
+
+  &:hover { background: rgba(255,255,255,0.1); color: #fff; }
+  &.is-active { background: rgba(99,102,241,0.2); border-color: $accent; color: $accent; }
+  &--danger:hover { background: rgba(239,68,68,0.2); border-color: #ef4444; color: #ef4444; }
+}
+
+// ========== 右侧聊天面板 ==========
+.chat-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: $card-bg;
+  border-left: 1px solid $border-subtle;
+
+  &__header {
+    padding: 20px 20px 12px;
+    border-bottom: 1px solid $border-subtle;
+    flex-shrink: 0;
+  }
+
+  &__brand {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
+  }
+
+  &__status-row {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
+  }
+
+  &__subtitle { font-size: 12px; color: $text-dim; margin: 0; }
 
   // 消息区
   &__messages {
     flex: 1;
     overflow-y: auto;
-    padding: 24px 0;
-    display: flex;
-    flex-direction: column;
+    padding: 20px;
+    display: flex; flex-direction: column;
   }
 
-  // 加载状态
-  &__loading {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 16px 0;
-    margin-left: 48px; // 对齐头像
+  // 状态提示
+  &__status {
+    padding: 8px 20px;
+    font-size: 12px;
+    color: $accent;
+    display: flex; align-items: center; gap: 8px;
   }
 
-  // 输入区域
-  &__input {
-    border-top: 1px solid $border-color-light;
-    background: $bg-color-white;
+  &__status-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: $text-dim;
+    &.is-active { background: $accent; }
+  }
+
+  // 输入区
+  &__input-area {
+    padding: 12px 16px 16px;
+    border-top: 1px solid $border-subtle;
+    flex-shrink: 0;
   }
 }
 
-// 加载动画
-.loading-indicator {
+.brand-icon { font-size: 22px; }
+.brand-name { font-size: 17px; font-weight: 700; color: $text-bright; letter-spacing: 0.5px; }
+.online-dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; }
+.online-text { font-size: 12px; color: #22c55e; }
+
+// ========== 聊天消息 ==========
+.chat-msg {
   display: flex;
-  gap: 4px;
+  margin-bottom: 20px;
 
-  &__dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: $color-primary;
-    animation: dotPulse 1.4s ease-in-out infinite both;
+  &--user { justify-content: flex-end; }
+  &--ai { justify-content: flex-start; }
 
-    &:nth-child(1) { animation-delay: 0s; }
-    &:nth-child(2) { animation-delay: 0.16s; }
-    &:nth-child(3) { animation-delay: 0.32s; }
+  &__bubble {
+    max-width: 75%;
+    padding: 12px 16px;
+    border-radius: 16px;
+    position: relative;
+
+    .chat-msg--user & {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+
+    .chat-msg--ai & {
+      background: rgba(255,255,255,0.05);
+      color: $text-bright;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-bottom-left-radius: 4px;
+    }
+
+    &--loading {
+      display: flex; gap: 5px; padding: 14px 18px;
+    }
   }
 
   &__text {
-    font-size: 14px;
-    color: $text-secondary;
+    font-size: 13.5px; line-height: 1.65; margin: 0;
+    white-space: pre-wrap; word-break: break-word;
+  }
+
+  &__time {
+    display: block;
+    font-size: 10px;
+    margin-top: 6px;
+    opacity: 0.5;
+    text-align: right;
   }
 }
 
-@keyframes dotPulse {
-  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
-  40% { opacity: 1; transform: scale(1); }
+// 输入框
+.chat-input-row {
+  display: flex; gap: 8px; align-items: center;
+}
+.chat-input-field {
+  flex: 1;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 10px 14px;
+  color: $text-bright;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+  &:focus { border-color: $accent; }
+  &::placeholder { color: $text-dim; }
+}
+.chat-send-btn {
+  width: 38px; height: 38px;
+  border-radius: 10px;
+  border: none;
+  background: rgba(255,255,255,0.06);
+  color: $text-dim;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s;
+  &.is-ready { background: $accent; color: #fff; }
+  &:hover { opacity: 0.9; }
 }
 
-// 消息入场动画
-.msg-enter-active {
-  transition: all 0.3s ease-out;
+// ========== Loading 点 ==========
+.loading-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  transition: background 0.2s;
+  &.is-lit { background: $accent; }
 }
 
-.msg-enter-from {
-  opacity: 0;
-  transform: translateY(12px);
-}
+// ========== 消息动画 ==========
+.msg-enter-active { transition: all 0.35s ease-out; }
+.msg-enter-from { opacity: 0; transform: translateY(8px); }
 
-// 响应式
-@media (max-width: $breakpoint-sm) {
-  .chat-view {
-    height: calc(100vh - $header-height - 32px);
-    max-width: 100%;
-
-    &__messages {
-      padding: 16px 0;
-    }
-  }
+// ========== 响应式 ==========
+@media (max-width: 1024px) {
+  .chat-layout { flex-direction: column; }
+  .visual-panel { flex: 0 0 50vh; }
 }
 </style>

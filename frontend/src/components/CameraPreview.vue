@@ -257,6 +257,7 @@ defineExpose({
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transform: scaleX(-1); // 镜像翻转
 
   &.is-hidden {
     opacity: 0;

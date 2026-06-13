@@ -8,6 +8,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/HomeView.vue'),
     meta: {
       title: '首页',
+      layout: 'blank',
     },
   },
   {

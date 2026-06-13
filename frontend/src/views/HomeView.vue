@@ -1,204 +1,246 @@
 <script setup lang="ts">
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
+const isVisible = ref(false)
 
-function goToChat(): void {
+onMounted(() => {
+  // 延迟显示，触发入场动画
+  requestAnimationFrame(() => {
+    isVisible.value = true
+  })
+})
+
+function handleStart(): void {
   router.push('/chat')
-}
-
-function goToMediaPreview(): void {
-  router.push('/media-preview')
 }
 </script>
 
 <template>
-  <div class="home-view">
-    <!-- Hero 区域 -->
-    <section class="hero">
-      <div class="hero__content">
-        <h2 class="hero__title">开启智能视觉对话体验</h2>
-        <p class="hero__description">
-          基于多模态大模型的实时视觉语音助手。
-          支持摄像头采集、语音交互、智能图片分析，让 AI 真正"看懂"你的世界。
-        </p>
-        <div class="hero__actions">
-          <el-button type="primary" size="large" round @click="goToChat">
-            💬 开始对话
-          </el-button>
-          <el-button size="large" round @click="goToMediaPreview">
-            📷 设备预览
-          </el-button>
-        </div>
-      </div>
-    </section>
+  <div class="landing">
+    <!-- 动态光斑背景 -->
+    <div class="landing__bg">
+      <div class="landing__orb landing__orb--1" />
+      <div class="landing__orb landing__orb--2" />
+      <div class="landing__orb landing__orb--3" />
+    </div>
 
-    <!-- 功能概览 -->
-    <section class="features">
-      <h3 class="features__title">核心能力</h3>
-      <el-row :gutter="24">
-        <el-col :xs="24" :sm="12" :lg="6">
-          <div class="feature-card" @click="goToMediaPreview">
-            <div class="feature-card__icon">📷</div>
-            <h4 class="feature-card__title">实时视觉采集</h4>
-            <p class="feature-card__desc">摄像头实时画面采集，Canvas 智能抽帧</p>
-          </div>
-        </el-col>
-        <el-col :xs="24" :sm="12" :lg="6">
-          <div class="feature-card" @click="goToMediaPreview">
-            <div class="feature-card__icon">🎙️</div>
-            <h4 class="feature-card__title">语音交互</h4>
-            <p class="feature-card__desc">VAD 语音活动检测，端侧成本控制</p>
-          </div>
-        </el-col>
-        <el-col :xs="24" :sm="12" :lg="6">
-          <div class="feature-card" @click="goToChat">
-            <div class="feature-card__icon">🧠</div>
-            <h4 class="feature-card__title">多模态理解</h4>
-            <p class="feature-card__desc">视觉+文本多模态大模型驱动</p>
-          </div>
-        </el-col>
-        <el-col :xs="24" :sm="12" :lg="6">
-          <div class="feature-card" @click="goToChat">
-            <div class="feature-card__icon">🗣️</div>
-            <h4 class="feature-card__title">语音合成</h4>
-            <p class="feature-card__desc">TTS 语音回复，自然对话体验</p>
-          </div>
-        </el-col>
-      </el-row>
-    </section>
+    <!-- 主内容 -->
+    <div class="landing__content" :class="{ 'is-visible': isVisible }">
+      <!-- 品牌标识 -->
+      <div class="landing__brand">
+        <p class="landing__eyebrow">AI VISION ASSISTANT</p>
+        <h1 class="landing__title">灵眸AI</h1>
+        <p class="landing__subtitle">看见世界，理解世界，与世界对话</p>
+      </div>
+
+      <!-- 开始按钮 -->
+      <button class="landing__cta" @click="handleStart">
+        <span class="landing__cta-text">开始AI对话</span>
+        <span class="landing__cta-arrow">→</span>
+      </button>
+
+      <!-- 底部提示 -->
+      <p class="landing__hint">基于多模态大模型的实时视觉语音助手</p>
+    </div>
   </div>
 </template>
 
 <style lang="scss" scoped>
-.home-view {
-  max-width: 1200px;
-  margin: 0 auto;
+// ==========================================
+// 灵眸AI 品牌首页 — 企业级科技风
+// ==========================================
+
+.landing {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #0a0e27 0%, #0f1435 25%, #12103a 50%, #0a0c24 75%, #060810 100%);
+  overflow: hidden;
 }
 
-// Hero
-.hero {
+// ========== 动态光斑 ==========
+.landing__bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.landing__orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.15;
+  animation: orbFloat 20s ease-in-out infinite;
+
+  &--1 {
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.3), transparent 70%);
+    top: -15%;
+    left: -10%;
+    animation-delay: 0s;
+    animation-duration: 22s;
+  }
+
+  &--2 {
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.25), transparent 70%);
+    bottom: -10%;
+    right: -8%;
+    animation-delay: -7s;
+    animation-duration: 18s;
+  }
+
+  &--3 {
+    width: 350px;
+    height: 350px;
+    background: radial-gradient(circle, rgba(6, 182, 212, 0.2), transparent 70%);
+    top: 40%;
+    left: 50%;
+    animation-delay: -14s;
+    animation-duration: 16s;
+    transform: translate(-50%, -50%);
+  }
+}
+
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(30px, -20px); }
+  50% { transform: translate(-15px, 25px); }
+  75% { transform: translate(20px, 10px); }
+}
+
+// ========== 主内容 ==========
+.landing__content {
+  position: relative;
+  z-index: 1;
   text-align: center;
-  padding: 80px 20px 60px;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.9s ease, transform 0.9s ease;
 
-  &__title {
-    font-size: 36px;
-    font-weight: 700;
-    color: $text-primary;
-    margin-bottom: 16px;
-    letter-spacing: 1px;
-  }
-
-  &__description {
-    font-size: 16px;
-    color: $text-secondary;
-    max-width: 640px;
-    margin: 0 auto 32px;
-    line-height: 1.8;
-  }
-
-  &__actions {
-    display: flex;
-    gap: 16px;
-    justify-content: center;
+  &.is-visible {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-// Features
-.features {
-  padding: 40px 0 80px;
-
-  &__title {
-    text-align: center;
-    font-size: 24px;
-    font-weight: 600;
-    color: $text-primary;
-    margin-bottom: 40px;
-  }
+// ========== 品牌区 ==========
+.landing__brand {
+  margin-bottom: 48px;
 }
 
-.feature-card {
-  background: $bg-color-white;
-  border-radius: 12px;
-  padding: 32px 24px;
-  text-align: center;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
-  transition: transform 0.2s, box-shadow 0.2s;
-  margin-bottom: 16px;
+.landing__eyebrow {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 6px;
+  color: rgba(148, 163, 184, 0.6);
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+
+.landing__title {
+  font-size: 96px;
+  font-weight: 800;
+  letter-spacing: -2px;
+  line-height: 1;
+  margin-bottom: 24px;
+  background: linear-gradient(135deg, #38bdf8 0%, #818cf8 40%, #a78bfa 70%, #c084fc 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 40px rgba(99, 102, 241, 0.3))
+          drop-shadow(0 0 80px rgba(56, 189, 248, 0.15));
+}
+
+.landing__subtitle {
+  font-size: 18px;
+  font-weight: 300;
+  color: rgba(203, 213, 225, 0.7);
+  letter-spacing: 4px;
+}
+
+// ========== CTA 按钮 ==========
+.landing__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 48px;
+  font-size: 17px;
+  font-weight: 500;
+  color: #fff;
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 50%, #8b5cf6 100%);
+  border: none;
+  border-radius: 100px;
   cursor: pointer;
+  letter-spacing: 1px;
+  box-shadow: 0 4px 24px rgba(59, 130, 246, 0.25),
+              0 8px 48px rgba(99, 102, 241, 0.15);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
 
   &:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(59, 130, 246, 0.35),
+                0 12px 56px rgba(99, 102, 241, 0.25);
   }
 
-  &__icon {
-    font-size: 40px;
-    margin-bottom: 16px;
+  &:active {
+    transform: translateY(0);
+    transition: transform 0.1s ease;
+  }
+}
+
+.landing__cta-arrow {
+  font-size: 20px;
+  transition: transform 0.3s ease;
+
+  .landing__cta:hover & {
+    transform: translateX(4px);
+  }
+}
+
+// ========== 底部提示 ==========
+.landing__hint {
+  margin-top: 32px;
+  font-size: 13px;
+  color: rgba(148, 163, 184, 0.35);
+  letter-spacing: 1px;
+}
+
+// ========== 响应式 ==========
+@media (max-width: 768px) {
+  .landing__title {
+    font-size: 56px;
   }
 
-  &__title {
-    font-size: 16px;
-    font-weight: 600;
-    color: $text-primary;
-    margin-bottom: 8px;
+  .landing__subtitle {
+    font-size: 15px;
+    letter-spacing: 2px;
   }
 
-  &__desc {
+  .landing__cta {
+    padding: 16px 36px;
+    font-size: 15px;
+  }
+
+  .landing__eyebrow {
+    letter-spacing: 4px;
+  }
+}
+
+@media (max-width: 375px) {
+  .landing__title {
+    font-size: 42px;
+  }
+
+  .landing__subtitle {
     font-size: 13px;
-    color: $text-secondary;
-    line-height: 1.6;
-  }
-}
-
-// 响应式
-// 1280
-@media (max-width: $breakpoint-md) {
-  .hero {
-    padding: 60px 20px 48px;
-
-    &__title { font-size: 30px; }
-  }
-}
-
-// 768 平板
-@media (max-width: $breakpoint-sm) {
-  .hero {
-    padding: 40px 16px 32px;
-
-    &__title { font-size: 24px; }
-    &__description { font-size: 14px; }
-
-    &__actions {
-      flex-direction: column;
-      align-items: center;
-    }
-  }
-
-  .features__title { font-size: 20px; }
-}
-
-// 375 手机
-@media (max-width: $breakpoint-xs) {
-  .hero {
-    padding: 32px 12px 24px;
-
-    &__title { font-size: 20px; }
-    &__description { font-size: 13px; }
-  }
-
-  .features {
-    padding: 24px 0 48px;
-
-    &__title { font-size: 18px; margin-bottom: 24px; }
-  }
-
-  .feature-card {
-    padding: 20px 16px;
-
-    &__icon { font-size: 32px; }
-    &__title { font-size: 14px; }
-    &__desc { font-size: 12px; }
+    letter-spacing: 1px;
   }
 }
 </style>

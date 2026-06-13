@@ -426,6 +426,7 @@ $accent: #6366f1;
   &__video {
     width: 100%; height: 100%;
     object-fit: cover;
+    transform: scaleX(-1); // 镜像翻转，还原真实照镜子体验
   }
 
   &__placeholder {

@@ -1,25 +1,23 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount } from 'vue'
+import { computed, onMounted, onBeforeUnmount } from 'vue'
+import { useRoute } from 'vue-router'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 import GlobalLoading from '@/components/GlobalLoading.vue'
 import { useAppStore } from '@/stores/app'
 
+const route = useRoute()
 const appStore = useAppStore()
 
-/** 网络状态监听 */
-function handleOnline(): void {
-  appStore.setOnline(true)
-}
+/** 首页全屏模式，不使用 DefaultLayout */
+const isBlankLayout = computed(() => route.meta.layout === 'blank')
 
-function handleOffline(): void {
-  appStore.setOnline(false)
-}
+function handleOnline(): void { appStore.setOnline(true) }
+function handleOffline(): void { appStore.setOnline(false) }
 
 onMounted(() => {
   window.addEventListener('online', handleOnline)
   window.addEventListener('offline', handleOffline)
 })
-
 onBeforeUnmount(() => {
   window.removeEventListener('online', handleOnline)
   window.removeEventListener('offline', handleOffline)
@@ -27,30 +25,38 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <!-- 离线提示 -->
   <div v-if="!appStore.isOnline" class="offline-banner">
     ⚠️ 网络连接已断开，部分功能不可用
   </div>
 
-  <DefaultLayout />
+  <template v-if="isBlankLayout">
+    <router-view v-slot="{ Component }">
+      <transition name="page-fade" mode="out-in">
+        <component :is="Component" :key="$route.fullPath" />
+      </transition>
+    </router-view>
+  </template>
 
-  <!-- 全局加载遮罩 -->
+  <DefaultLayout v-else />
+
   <GlobalLoading />
 </template>
 
 <style lang="scss">
 .offline-banner {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 10000;
+  top: 0; left: 0; right: 0; z-index: 10000;
   background: $color-warning;
-  color: #fff;
-  text-align: center;
-  padding: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.5px;
+  color: #fff; text-align: center;
+  padding: 8px; font-size: 13px; font-weight: 500;
+}
+
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.page-fade-enter-from,
+.page-fade-leave-to {
+  opacity: 0;
 }
 </style>

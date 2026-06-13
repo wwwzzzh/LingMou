@@ -36,6 +36,42 @@ watch(stream, (newStream) => {
   }
 })
 
+// ==================== SpotlightCard + BorderGlow ====================
+const videoWrapperRef = ref<HTMLElement | null>(null)
+const spotlightX = ref(0)
+const spotlightY = ref(0)
+const edgeProximity = ref(0)
+const cursorAngle = ref(0)
+
+function handleVideoPointerMove(e: PointerEvent): void {
+  const el = videoWrapperRef.value
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  const x = e.clientX - rect.left
+  const y = e.clientY - rect.top
+  spotlightX.value = x
+  spotlightY.value = y
+
+  // BorderGlow: 计算边缘距离和角度
+  const cx = rect.width / 2
+  const cy = rect.height / 2
+  const dx = x - cx
+  const dy = y - cy
+  let kx = Infinity, ky = Infinity
+  if (dx !== 0) kx = cx / Math.abs(dx)
+  if (dy !== 0) ky = cy / Math.abs(dy)
+  edgeProximity.value = Math.min(Math.max(1 / Math.min(kx, ky), 0), 1)
+
+  const radians = Math.atan2(dy, dx)
+  let degrees = radians * (180 / Math.PI) + 90
+  if (degrees < 0) degrees += 360
+  cursorAngle.value = degrees
+}
+
+function handleVideoPointerLeave(): void {
+  edgeProximity.value = 0
+}
+
 // ==================== 聊天 ====================
 const chatContainerRef = ref<HTMLElement | null>(null)
 const inputText = ref('')
@@ -174,8 +210,19 @@ onBeforeUnmount(() => {
         <span class="status-time">{{ currentTime }}</span>
       </div>
 
-      <!-- 摄像头画面 -->
-      <div class="visual-panel__video-wrapper">
+      <!-- 摄像头画面 (SpotlightCard + BorderGlow) -->
+      <div
+        ref="videoWrapperRef"
+        class="visual-panel__video-wrapper"
+        :style="{
+          '--spotlight-x': spotlightX + 'px',
+          '--spotlight-y': spotlightY + 'px',
+          '--edge-proximity': edgeProximity,
+          '--cursor-angle': cursorAngle + 'deg',
+        }"
+        @pointermove="handleVideoPointerMove"
+        @pointerleave="handleVideoPointerLeave"
+      >
         <video
           v-show="cameraEnabled && stream"
           ref="videoRef"
@@ -335,6 +382,45 @@ $accent: #6366f1;
                 inset 0 1px 0 rgba(255,255,255,0.03);
     position: relative;
     background: #0d0f17;
+
+    // SpotlightCard: 鼠标跟随聚光灯
+    &::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(
+        600px circle at var(--spotlight-x, 50%) var(--spotlight-y, 50%),
+        rgba(99, 102, 241, 0.08),
+        transparent 50%
+      );
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none; z-index: 5;
+    }
+
+    &:hover::before { opacity: 1; }
+
+    // BorderGlow: 边缘发光跟随
+    &::after {
+      content: '';
+      position: absolute; inset: -2px;
+      border-radius: 22px;
+      background: conic-gradient(
+        from var(--cursor-angle, 0deg) at 50% 50%,
+        transparent,
+        rgba(99, 102, 241, 0) 60%,
+        rgba(99, 102, 241, calc(0.5 * var(--edge-proximity, 0))) 80%,
+        rgba(139, 92, 246, calc(0.6 * var(--edge-proximity, 0))) 90%,
+        transparent
+      );
+      opacity: var(--edge-proximity, 0);
+      transition: opacity 0.15s;
+      pointer-events: none; z-index: 4;
+      mask: radial-gradient(
+        farthest-side,
+        transparent calc(100% - 3px),
+        #000 calc(100% - 3px)
+      );
+    }
   }
 
   &__video {

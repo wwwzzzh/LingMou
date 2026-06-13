@@ -18,9 +18,21 @@ springdoc:
     path: /swagger-ui.html
 
 ai:
-  asr-provider: mock
-  tts-provider: mock
-  vision-provider: mock
+  asr-provider: mock      # mock | volcengine
+  tts-provider: mock      # mock | volcengine
+  vision-provider: mock   # mock | volcengine
+
+volcengine:
+  ark:
+    base-url: https://ark.cn-beijing.volces.com/api/v3
+    model: doubao-seed-2.0-lite-250828
+    api-key: your_ark_api_key
+  asr:
+    access-key: your_asr_ak
+    secret-key: your_asr_sk
+  tts:
+    access-key: your_tts_ak
+    secret-key: your_tts_sk
 
 chat:
   max-round: 20

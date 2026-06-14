@@ -1,0 +1,44 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/ai_vision_assistant?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf-8
+    username: root
+    password: your_mysql_password
+  redis:
+    host: localhost
+    port: 6379
+    password: your_redis_password
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+ai:
+  asr-provider: mock      # mock | volcengine
+  tts-provider: mock      # mock | volcengine
+  vision-provider: mock   # mock | volcengine
+
+volcengine:
+  ark:
+    base-url: https://ark.cn-beijing.volces.com/api/v3
+    model: doubao-seed-2-0-lite-260215
+    api-key: your_ark_api_key
+  asr:
+    access-key: your_asr_ak
+    secret-key: your_asr_sk
+  tts:
+    access-key: your_tts_ak
+    secret-key: your_tts_sk
+
+chat:
+  max-round: 20
+  summary-trigger: 20
+  summary-keep-rounds: 10
+
+rate-limit:
+  max-requests: 20
+  window-seconds: 60

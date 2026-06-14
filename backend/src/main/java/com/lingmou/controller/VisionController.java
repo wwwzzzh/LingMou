@@ -42,11 +42,20 @@ public class VisionController {
         return Result.success(Map.of("reply", reply));
     }
 
+    private static final long MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+
     @Operation(summary = "上传图片帧进行视觉分析")
     @PostMapping("/upload")
     public Result<Map<String, String>> upload(@RequestParam("file") MultipartFile file) throws IOException {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("图片文件为空");
+        }
+        if (file.getSize() > MAX_FILE_SIZE) {
+            throw new IllegalArgumentException("文件过大，最大支持 10MB");
+        }
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            throw new IllegalArgumentException("仅支持图片文件");
         }
 
         String originalName = file.getOriginalFilename();

@@ -28,10 +28,14 @@ public class ChatController {
 
     private final VisionModelProvider visionProvider;
     private final ChatSessionService sessionService;
+    private final com.lingmou.service.ConversationSummaryService summaryService;
 
-    public ChatController(VisionModelProvider visionProvider, ChatSessionService sessionService) {
+    public ChatController(VisionModelProvider visionProvider,
+                         ChatSessionService sessionService,
+                         com.lingmou.service.ConversationSummaryService summaryService) {
         this.visionProvider = visionProvider;
         this.sessionService = sessionService;
+        this.summaryService = summaryService;
     }
 
     @Operation(summary = "发送对话消息")
@@ -55,6 +59,10 @@ public class ChatController {
 
         sessionService.appendHistory(sessionId, new ChatHistory("user", message));
         sessionService.appendHistory(sessionId, new ChatHistory("assistant", reply));
+
+        if (sessionService.needsSummary(sessionId)) {
+            summaryService.compress(sessionId);
+        }
 
         log.info("Chat: sessionId={}, reply length={}", sessionId, reply.length());
         return Result.success(Map.of("reply", reply));

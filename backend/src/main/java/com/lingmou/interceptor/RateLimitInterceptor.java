@@ -10,8 +10,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.util.ContentCachingRequestWrapper;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 @Component
@@ -36,9 +39,12 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response,
                              Object handler) throws Exception {
-        String sessionId = request.getParameter("sessionId");
+        String sessionId = request.getHeader("X-Session-Id");
         if (sessionId == null) {
-            sessionId = request.getHeader("X-Session-Id");
+            sessionId = request.getParameter("sessionId");
+        }
+        if (sessionId == null && request instanceof ContentCachingRequestWrapper wrapper) {
+            sessionId = extractSessionIdFromBody(wrapper);
         }
         if (sessionId == null) {
             return true;
@@ -61,6 +67,20 @@ public class RateLimitInterceptor implements HandlerInterceptor {
 
         redisTemplate.opsForValue().increment(key);
         return true;
+    }
+
+    private String extractSessionIdFromBody(ContentCachingRequestWrapper wrapper) {
+        try {
+            byte[] content = wrapper.getContentAsByteArray();
+            if (content.length == 0) return null;
+            String body = new String(content, StandardCharsets.UTF_8);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> json = objectMapper.readValue(body, Map.class);
+            Object sid = json.get("sessionId");
+            return sid != null ? sid.toString() : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private void writeErrorResponse(HttpServletResponse response) throws IOException {

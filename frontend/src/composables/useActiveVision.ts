@@ -1,5 +1,5 @@
 import { ref, type Ref } from 'vue'
-import request from '@/api/request'
+import visionApi from '@/api/modules/vision'
 import { calculateChangeRate } from '@/utils/motionDetector'
 
 const CHANGE_THRESHOLD = 0.15
@@ -55,10 +55,7 @@ export function useActiveVision(
       : `你在持续监控一个场景。${repeatHint}\n如果画面发生了明显变化，请用中文简洁描述（1句话）。如果没有明显变化，请只回复"无明显变化"。`
 
     try {
-      const res = await request.post('/api/vision/analyze', {
-        imageBase64: frameBase64,
-        prompt,
-      })
+      const res = await visionApi.analyze(frameBase64, prompt)
       if (res.code === 200) {
         return res.data.reply || ''
       }

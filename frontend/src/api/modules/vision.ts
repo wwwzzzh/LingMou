@@ -26,6 +26,14 @@ const visionApi = {
       },
     })
   },
+
+  /**
+   * POST /api/vision/analyze
+   * 分析 base64 图片，返回 AI 回复
+   */
+  analyze(imageBase64: string, prompt: string): Promise<ApiResult<{ reply: string }>> {
+    return request.post('/api/vision/analyze', { imageBase64, prompt })
+  },
 }
 
 export default visionApi

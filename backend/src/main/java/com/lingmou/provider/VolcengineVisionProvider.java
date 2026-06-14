@@ -33,7 +33,7 @@ public class VolcengineVisionProvider implements VisionModelProvider {
 
     public VolcengineVisionProvider(
             @Value("${volcengine.ark.api-key}") String apiKey,
-            @Value("${volcengine.ark.model:doubao-seed-2.0-lite-250828}") String modelName,
+            @Value("${volcengine.ark.model:doubao-seed-2-0-lite-260215}") String modelName,
             @Value("${volcengine.ark.base-url:https://ark.cn-beijing.volces.com/api/v3}") String baseUrl) {
         this.apiKey = apiKey;
         this.modelName = modelName;
@@ -178,8 +178,11 @@ public class VolcengineVisionProvider implements VisionModelProvider {
     @Override
     public String correctAsr(String rawText) {
         try {
+            // 防止 prompt 注入：截断过长文本，移除换行
+            String safeText = rawText.length() > 500 ? rawText.substring(0, 500) : rawText;
+            safeText = safeText.replace('\n', ' ').replace('\r', ' ');
             Map<String, Object> message = Map.of("role", "user", "content",
-                    "请纠正以下语音识别结果中的错别字，只输出纠正后的文本，不要加任何解释：\n\"" + rawText + "\"");
+                    "请纠正以下语音识别结果中的错别字，只输出纠正后的文本，不要加任何解释：\n\"" + safeText + "\"");
 
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("model", modelName);

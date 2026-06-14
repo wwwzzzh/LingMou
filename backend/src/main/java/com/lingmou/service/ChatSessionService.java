@@ -39,7 +39,7 @@ public class ChatSessionService {
         return new ArrayList<>();
     }
 
-    public void appendHistory(String sessionId, ChatHistory entry) {
+    public synchronized void appendHistory(String sessionId, ChatHistory entry) {
         String key = KEY_PREFIX + sessionId;
         List<ChatHistory> histories = getHistory(sessionId);
         histories.add(entry);

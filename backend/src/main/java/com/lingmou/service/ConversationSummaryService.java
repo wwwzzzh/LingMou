@@ -36,7 +36,7 @@ public class ConversationSummaryService {
         }
 
         int oldCount = histories.size() - summaryKeepRounds;
-        List<ChatHistory> oldRounds = histories.subList(0, oldCount);
+        List<ChatHistory> oldRounds = new ArrayList<>(histories.subList(0, oldCount));
         StringBuilder prompt = new StringBuilder("请将以下对话总结为一句话摘要：\n");
         for (ChatHistory h : oldRounds) {
             prompt.append("[").append(h.getRole()).append("]: ").append(h.getContent()).append("\n");
@@ -51,7 +51,7 @@ public class ConversationSummaryService {
                 Collections.emptyList()
         );
 
-        List<ChatHistory> recentRounds = histories.subList(oldCount, histories.size());
+        List<ChatHistory> recentRounds = new ArrayList<>(histories.subList(oldCount, histories.size()));
         List<ChatHistory> compressed = new ArrayList<>();
         compressed.add(new ChatHistory("system", summary));
         compressed.addAll(recentRounds);

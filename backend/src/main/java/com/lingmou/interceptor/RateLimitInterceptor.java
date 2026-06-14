@@ -2,6 +2,7 @@ package com.lingmou.interceptor;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lingmou.common.Result;
+import com.lingmou.config.BodyCacheFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
@@ -10,7 +11,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
-import org.springframework.web.util.ContentCachingRequestWrapper;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -43,40 +43,42 @@ public class RateLimitInterceptor implements HandlerInterceptor {
         if (sessionId == null) {
             sessionId = request.getParameter("sessionId");
         }
-        if (sessionId == null && request instanceof ContentCachingRequestWrapper wrapper) {
-            sessionId = extractSessionIdFromBody(wrapper);
+        if (sessionId == null && request instanceof BodyCacheFilter.EagerBodyRequestWrapper wrapper) {
+            sessionId = extractSessionIdFromBody(wrapper.getCachedBody());
         }
         if (sessionId == null) {
             return true;
         }
 
         String key = RATE_KEY_PREFIX + sessionId;
-        Object current = redisTemplate.opsForValue().get(key);
 
-        if (current == null) {
-            redisTemplate.opsForValue().set(key, 1, windowSeconds, TimeUnit.SECONDS);
+        // 原子操作：INCR 首次调用自动创建 key，无需 check-then-set
+        Long count = redisTemplate.opsForValue().increment(key);
+        if (count == null) {
             return true;
         }
 
-        int count = Integer.parseInt(current.toString());
-        if (count >= maxRequests) {
+        // 首次创建时设置过期时间
+        if (count == 1) {
+            redisTemplate.expire(key, windowSeconds, TimeUnit.SECONDS);
+        }
+
+        if (count > maxRequests) {
             log.warn("Rate limit exceeded: sessionId={}, count={}", sessionId, count);
             writeErrorResponse(response);
             return false;
         }
 
-        redisTemplate.opsForValue().increment(key);
         return true;
     }
 
-    private String extractSessionIdFromBody(ContentCachingRequestWrapper wrapper) {
+    private String extractSessionIdFromBody(byte[] body) {
         try {
-            byte[] content = wrapper.getContentAsByteArray();
-            if (content.length == 0) return null;
-            String body = new String(content, StandardCharsets.UTF_8);
+            if (body == null || body.length == 0) return null;
+            String json = new String(body, StandardCharsets.UTF_8);
             @SuppressWarnings("unchecked")
-            Map<String, Object> json = objectMapper.readValue(body, Map.class);
-            Object sid = json.get("sessionId");
+            Map<String, Object> map = objectMapper.readValue(json, Map.class);
+            Object sid = map.get("sessionId");
             return sid != null ? sid.toString() : null;
         } catch (Exception e) {
             return null;

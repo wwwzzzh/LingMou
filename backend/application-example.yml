@@ -36,7 +36,7 @@ volcengine:
 
 chat:
   max-round: 20
-  summary-trigger: 20
+  summary-trigger: 16
   summary-keep-rounds: 10
 
 rate-limit:

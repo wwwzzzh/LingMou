@@ -48,6 +48,12 @@ public class VolcengineVisionProvider implements VisionModelProvider {
         try {
             List<Map<String, Object>> messages = new ArrayList<>();
 
+            // System prompt — 设定 AI 身份
+            messages.add(Map.of("role", "system", "content",
+                    "你是灵眸AI，一个由字节跳动豆包大模型驱动的智能视觉对话助手。" +
+                    "你可以看到用户摄像头画面并回答问题。请用中文回复，语气友好简洁。" +
+                    "当用户问你是谁或你的身份时，告诉他们你是灵眸AI。"));
+
             // Add history
             for (ChatHistory h : histories) {
                 Map<String, Object> msg = Map.of(
@@ -130,13 +136,18 @@ public class VolcengineVisionProvider implements VisionModelProvider {
             ));
             contentParts.add(Map.of("type", "text", "text", prompt));
 
-            Map<String, Object> message = new HashMap<>();
-            message.put("role", "user");
-            message.put("content", contentParts);
+            Map<String, Object> userMessage = new HashMap<>();
+            userMessage.put("role", "user");
+            userMessage.put("content", contentParts);
 
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("model", modelName);
-            requestBody.put("messages", List.of(message));
+            requestBody.put("messages", List.of(
+                    Map.of("role", "system", "content",
+                            "你是灵眸AI的视觉监控模块。请用中文简洁描述画面变化，" +
+                            "一两句话即可。如果没有明显变化，请回复\"无明显变化\"。"),
+                    userMessage
+            ));
             requestBody.put("max_tokens", 256);
 
             String json = objectMapper.writeValueAsString(requestBody);

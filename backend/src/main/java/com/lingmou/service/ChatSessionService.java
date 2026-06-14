@@ -22,7 +22,7 @@ public class ChatSessionService {
     @Value("${chat.max-round:20}")
     private int maxRound;
 
-    @Value("${chat.summary-trigger:20}")
+    @Value("${chat.summary-trigger:16}")
     private int summaryTrigger;
 
     public ChatSessionService(RedisTemplate<String, Object> redisTemplate) {
@@ -44,13 +44,13 @@ public class ChatSessionService {
         List<ChatHistory> histories = getHistory(sessionId);
         histories.add(entry);
         if (histories.size() > maxRound) {
-            histories = histories.subList(histories.size() - maxRound, histories.size());
+            histories = new ArrayList<>(histories.subList(histories.size() - maxRound, histories.size()));
         }
         redisTemplate.opsForValue().set(key, histories, 24, TimeUnit.HOURS);
     }
 
     public boolean needsSummary(String sessionId) {
-        return getHistory(sessionId).size() > summaryTrigger;
+        return getHistory(sessionId).size() >= summaryTrigger;
     }
 
     public void replaceHistory(String sessionId, List<ChatHistory> newHistories) {

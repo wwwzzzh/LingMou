@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -52,7 +53,7 @@ public class AudioController {
 
     @Operation(summary = "文字转语音")
     @PostMapping("/tts")
-    public Result<Map<String, String>> tts(@Valid TtsRequest request) {
+    public Result<Map<String, String>> tts(@Valid @RequestBody TtsRequest request) {
         byte[] audioBytes = ttsProvider.textToSpeech(request.getText());
         String base64Audio = Base64.getEncoder().encodeToString(audioBytes);
         return Result.success(Map.of(

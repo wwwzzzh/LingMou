@@ -154,6 +154,7 @@ async function handleToggleCamera(): Promise<void> {
 }
 
 function handleToggleMic(): void {
+  if (!stream.value) { startDevice(); return }
   toggleMic()
 }
 
@@ -241,28 +242,24 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <!-- 底部控制栏 -->
+      <!-- 底部控制栏：仅 2 个开关按钮 -->
       <div class="visual-panel__controls">
-        <el-tooltip content="开启摄像头" placement="top">
-          <button class="ctrl-btn" :class="{ 'is-active': cameraEnabled }" @click="handleToggleCamera">
-            <el-icon :size="18"><VideoPlay v-if="!cameraEnabled" /><VideoPause v-else /></el-icon>
-          </button>
-        </el-tooltip>
-        <el-tooltip content="关闭摄像头" placement="top">
-          <button class="ctrl-btn ctrl-btn--danger" @click="toggleCamera">
-            <el-icon :size="18"><VideoPause /></el-icon>
-          </button>
-        </el-tooltip>
-        <el-tooltip content="开启麦克风" placement="top">
-          <button class="ctrl-btn" :class="{ 'is-active': micEnabled }" @click="handleToggleMic">
-            <el-icon :size="18"><Microphone /></el-icon>
-          </button>
-        </el-tooltip>
-        <el-tooltip content="关闭麦克风" placement="top">
-          <button class="ctrl-btn ctrl-btn--danger" @click="toggleMic">
-            <el-icon :size="18"><Promotion /></el-icon>
-          </button>
-        </el-tooltip>
+        <button
+          class="ctrl-btn"
+          :class="{ 'is-active': cameraEnabled }"
+          @click="handleToggleCamera"
+        >
+          <el-icon :size="20"><VideoPlay v-if="!cameraEnabled" /><VideoPause v-else /></el-icon>
+          <span class="ctrl-btn__label">{{ cameraEnabled ? '关闭' : '开启' }}</span>
+        </button>
+        <button
+          class="ctrl-btn"
+          :class="{ 'is-active': micEnabled }"
+          @click="handleToggleMic"
+        >
+          <el-icon :size="20"><Microphone /></el-icon>
+          <span class="ctrl-btn__label">{{ micEnabled ? '关闭' : '开启' }}</span>
+        </button>
       </div>
     </div>
 
@@ -476,18 +473,29 @@ $accent: #6366f1;
 
 // 控制按钮
 .ctrl-btn {
-  width: 38px; height: 38px;
-  border-radius: 50%;
-  border: 1px solid rgba(255,255,255,0.1);
-  background: rgba(255,255,255,0.04);
-  color: rgba(255,255,255,0.6);
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 18px;
+  border-radius: 100px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(148, 163, 184, 0.6);
   cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
   transition: all 0.2s ease;
+  font-size: 13px;
+  white-space: nowrap;
 
-  &:hover { background: rgba(255,255,255,0.1); color: #fff; }
-  &.is-active { background: rgba(99,102,241,0.2); border-color: $accent; color: $accent; }
-  &--danger:hover { background: rgba(239,68,68,0.2); border-color: #ef4444; color: #ef4444; }
+  &__label { font-size: 12px; }
+
+  &:hover { background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.8); }
+
+  // 灰色（关闭） / 红色（开启）
+  &.is-active {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #ef4444;
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.15);
+    &:hover { background: rgba(239, 68, 68, 0.25); }
+  }
 }
 
 // ========== 右侧聊天面板 ==========

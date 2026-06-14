@@ -1,154 +1,397 @@
-# LingMou（灵眸）— AI 视觉对话助手
+# 🫁 灵眸 AI（LingMou）— 智能视觉对话助手
 
-基于多模态大模型的实时视觉语音助手。支持摄像头实时采集、语音交互、智能图片分析，让 AI "看懂"你的世界。
-
----
-
-## 📋 项目简介
-
-AI Vision Assistant 是一个**端云协同**的实时视觉语音助手。前端基于 Vue3 构建，通过浏览器 API 采集音视频流，经 Canvas 抽帧 + 画面变化检测 + VAD 语音活动检测实现端侧成本控制，再将有效数据上传至后端多模态大模型进行视觉理解与对话生成。
-
-### 核心特性
-
-- 📷 **实时视觉采集**：摄像头画面采集 + Canvas 智能抽帧
-- 🎙️ **语音交互**：麦克风录制 + VAD 端侧检测 + ASR/TTS
-- 🧠 **多模态理解**：视觉+文本多模态大模型驱动
-- 💰 **成本控制**：端侧画面变化检测 + 图片压缩 + 静音检测
-- 📱 **响应式设计**：适配 1920~375 全断点
+基于火山引擎豆包大模型的实时多模态视觉语音助手。摄像头画面实时理解 + 语音对话 + AI 主动监控，让 AI "看懂"你的世界。
 
 ---
 
-## 🛠 技术栈
+## 功能总览
 
-### 前端
-
-| 技术 | 说明 |
-|------|------|
-| Vue 3 | 渐进式 JavaScript 框架 (Composition API) |
-| TypeScript | 类型安全 |
-| Vite | 极速构建工具 |
-| Pinia | 状态管理 |
-| Vue Router 4 | 路由管理 |
-| Axios | HTTP 客户端 |
-| Element Plus | UI 组件库 |
-| SCSS | CSS 预处理器 |
-
-### 后端
-
-| 技术 | 说明 |
-|------|------|
-| Spring Boot 3.x | Java 企业级框架 |
-| MyBatis Plus | ORM 框架 |
-| MySQL 8 | 关系型数据库 |
-| Redis | 缓存与限流 |
-| Maven | 项目构建 |
-
-### AI 能力（Provider 模式，厂商中立）
-
-| 模块 | 说明 |
-|------|------|
-| VisionModelProvider | 多模态视觉理解 |
-| AsrProvider | 语音识别 |
-| TtsProvider | 语音合成 |
+| 模块 | 功能 | 状态 |
+|------|------|------|
+| 多模态对话 | 摄像头画面 + 文字 → AI 回复（流式输出） | ✅ |
+| 主动视觉监控 | 每 10s 定时拍照 → AI 分析画面变化 → TTS 播报 | ✅ |
+| 语音识别（ASR） | 浏览器端 Web Speech API，支持连续识别 + AI 纠错 | ✅ |
+| 语音合成（TTS） | 浏览器端 Web Speech API，AI 回复自动朗读 | ✅ |
+| 图片上传分析 | 上传图片 → 多模态分析 | ✅ |
+| 会话管理 | Redis 缓存对话历史，24h TTL，长会话自动摘要压缩 | ✅ |
+| 限流保护 | 基于 sessionId 的 Redis 原子计数器 | ✅ |
+| Provider 切换 | `application.yml` 一行配置切换 mock / volcengine | ✅ |
 
 ---
 
-## 📁 目录结构
+## 技术架构
+
+```
+┌─ Browser ───────────────────────────────────────────────────┐
+│  Vue 3 + TypeScript + Pinia + Element Plus                  │
+│                                                             │
+│  Camera ──→ Canvas 抽帧 ──→ useActiveVision (10s定时)      │
+│  Mic    ──→ Web Speech API (ASR) ──→ ASR 纠错               │
+│  Speaker ←── Web Speech API (TTS)                            │
+│                                                             │
+│  axios ──→ POST /api/chat/stream  (SSE 流式)                │
+│        ──→ POST /api/chat/send    (普通对话)                │
+│        ──→ POST /api/chat/correct (ASR 纠错)                │
+│        ──→ POST /api/vision/upload (图片上传)               │
+│        ──→ POST /api/vision/analyze (base64 图片分析)      │
+│        ──→ POST /api/audio/tts   (后端 TTS)                 │
+│        ──→ POST /api/audio/asr   (后端 ASR)                 │
+└───────────────────────┬─────────────────────────────────────┘
+                        │ HTTP
+┌─ Spring Boot 3.4 ────┴──────────────────────────────────────┐
+│  Controller → Provider (接口) → VolcengineProvider (实现)    │
+│                                                             │
+│  ChatController    ──→ VisionModelProvider.chat()           │
+│  ChatController    ──→ VisionModelProvider.chatStream()     │
+│  ChatController    ──→ VisionModelProvider.correctAsr()     │
+│  VisionController  ──→ VisionModelProvider.analyze()        │
+│  AudioController   ──→ AsrProvider / TtsProvider            │
+│                                                             │
+│  ChatSessionService   ──→ Redis (会话历史)                  │
+│  RateLimitInterceptor ──→ Redis (限流计数)                  │
+│  ConversationSummaryService ──→ 长会话自动摘要               │
+└───────────────────────┬─────────────────────────────────────┘
+                        │ HTTPS
+┌─ 火山引擎 Ark ────────┴──────────────────────────────────────┐
+│  POST /api/v3/chat/completions                               │
+│  Model: doubao-seed-2-0-lite-260215（多模态）                │
+└──────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 项目结构
 
 ```
 LingMou/
-├── frontend/                # 前端 Vue3 项目
+├── frontend/                          # Vue 3 前端
 │   ├── src/
-│   │   ├── api/             # API 接口层
-│   │   │   ├── request.ts         # Axios 封装
-│   │   │   └── modules/           # 业务模块
-│   │   ├── assets/          # 静态资源
-│   │   ├── components/      # 公共组件
-│   │   ├── composables/     # 组合式函数
-│   │   ├── layouts/         # 布局组件
-│   │   ├── router/          # 路由配置
-│   │   ├── stores/          # Pinia 状态管理
-│   │   ├── styles/          # SCSS 样式
-│   │   ├── types/           # TypeScript 类型
-│   │   ├── utils/           # 工具函数
-│   │   └── views/           # 页面视图
-│   ├── .env.example         # 环境变量模板
+│   │   ├── api/
+│   │   │   ├── request.ts             # Axios 实例（拦截器、错误处理）
+│   │   │   └── modules/
+│   │   │       ├── chat.ts            # 对话 API（send / stream / correct）
+│   │   │       ├── chat.mock.ts       # Mock 对话（已弃用）
+│   │   │       ├── audio.ts           # 语音 API（ASR / TTS）
+│   │   │       └── vision.ts          # 视觉 API（upload / analyze）
+│   │   ├── assets/                    # 静态资源
+│   │   ├── components/                # 公共组件
+│   │   │   ├── CameraPreview.vue      # 摄像头预览
+│   │   │   ├── FrameCapturePanel.vue  # 抽帧面板
+│   │   │   └── VoiceIndicator.vue     # 语音状态指示器
+│   │   ├── composables/               # 组合式函数（核心逻辑）
+│   │   │   ├── useActiveVision.ts     # 主动视觉监控（10s 定时）
+│   │   │   ├── useMediaDevice.ts      # 媒体设备管理
+│   │   │   ├── useSpeechRecognition.ts # 浏览器 ASR
+│   │   │   └── useSpeechSynthesis.ts  # 浏览器 TTS
+│   │   ├── layouts/                   # 布局
+│   │   ├── router/                    # 路由
+│   │   ├── stores/                    # Pinia 状态
+│   │   │   ├── chat.ts                # 聊天状态（消息列表、流式更新）
+│   │   │   ├── user.ts                # 用户/会话状态
+│   │   │   └── app.ts                 # 应用全局状态
+│   │   ├── styles/                    # SCSS
+│   │   ├── types/                     # TypeScript 类型定义
+│   │   ├── utils/                     # 工具函数
+│   │   │   ├── index.ts               # ID 生成、时间格式化
+│   │   │   └── motionDetector.ts      # 像素变化率计算
+│   │   └── views/
+│   │       ├── HomeView.vue           # 首页（品牌展示）
+│   │       ├── ChatView.vue           # 主对话页（75% 视频 + 25% 聊天）
+│   │       └── MediaPreviewView.vue   # 媒体预览页
+│   ├── .env.example                   # 环境变量模板
+│   ├── .env.development               # 开发环境变量（gitignored）
+│   ├── vite.config.ts
 │   └── package.json
-├── backend/                 # 后端 Spring Boot 项目
-├── docs/                    # 设计文档
+│
+├── backend/                           # Spring Boot 后端
+│   ├── src/main/java/com/lingmou/
+│   │   ├── LingMouApplication.java    # 启动类
+│   │   ├── common/
+│   │   │   └── Result.java            # 统一响应格式 {code, message, data, timestamp}
+│   │   ├── config/
+│   │   │   ├── BodyCacheFilter.java   # 请求体缓存 Filter
+│   │   │   ├── CorsConfig.java        # CORS 全局配置
+│   │   │   └── WebConfig.java         # 拦截器 + 静态资源配置
+│   │   ├── controller/
+│   │   │   ├── HealthController.java  # 健康检查 GET /health
+│   │   │   ├── ChatController.java    # 对话 /api/chat/*
+│   │   │   ├── VisionController.java  # 视觉 /api/vision/*
+│   │   │   └── AudioController.java   # 语音 /api/audio/*
+│   │   ├── dto/
+│   │   │   ├── ChatRequest.java       # 对话请求（含 frameBase64）
+│   │   │   ├── CorrectRequest.java    # ASR 纠错请求
+│   │   │   ├── TtsRequest.java        # TTS 请求
+│   │   │   └── VisionAnalyzeRequest.java # 视觉分析请求
+│   │   ├── entity/
+│   │   │   └── ChatHistory.java       # 对话历史实体
+│   │   ├── exception/
+│   │   │   └── GlobalExceptionHandler.java # 全局异常处理（400/429/500）
+│   │   ├── interceptor/
+│   │   │   ├── RateLimitInterceptor.java   # Redis 限流
+│   │   │   └── RequestTimingInterceptor.java # 请求日志
+│   │   ├── provider/                  # AI Provider 接口 + 实现
+│   │   │   ├── VisionModelProvider.java    # 视觉模型接口
+│   │   │   ├── VolcengineVisionProvider.java # 火山引擎实现（Ark API）
+│   │   │   ├── MockVisionProvider.java    # Mock 实现
+│   │   │   ├── AsrProvider.java           # ASR 接口
+│   │   │   ├── VolcengineAsrProvider.java # 火山引擎 ASR（骨架）
+│   │   │   ├── MockAsrProvider.java       # Mock ASR
+│   │   │   ├── TtsProvider.java           # TTS 接口
+│   │   │   ├── VolcengineTtsProvider.java # 火山引擎 TTS（骨架）
+│   │   │   └── MockTtsProvider.java       # Mock TTS
+│   │   ├── service/
+│   │   │   ├── ChatSessionService.java         # Redis 会话管理
+│   │   │   └── ConversationSummaryService.java # 长会话摘要压缩
+│   │   └── util/
+│   ├── src/main/resources/
+│   │   └── application.yml            # 应用配置（gitignored）
+│   ├── application-example.yml        # 配置模板
+│   └── pom.xml
+│
+├── .gitignore
 └── README.md
 ```
 
 ---
 
-## 🚀 快速启动
+## 快速开始
 
-### 前端
+### 环境要求
 
-```bash
-cd frontend
-npm install
-npm run dev        # 开发模式 → http://localhost:5173
-npm run build      # 生产构建 → dist/
-npm run preview    # 预览生产构建
+| 依赖 | 版本 |
+|------|------|
+| JDK | 17+ |
+| Maven | 3.9+ |
+| Node.js | 18+ |
+| MySQL | 8.0+ |
+| Redis | 5.0+ |
+
+### 1. 配置数据库
+
+```sql
+CREATE DATABASE IF NOT EXISTS ai_vision_assistant
+  DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-### 后端
+### 2. 配置后端
 
 ```bash
 cd backend
-mvn spring-boot:run
+# 复制配置模板并填入真实值
+cp application-example.yml src/main/resources/application.yml
+# 编辑 application.yml：
+#   - MySQL 用户名/密码
+#   - Redis 密码（如无密码留空）
+#   - 火山引擎 Ark API Key
+#   - ai.vision-provider=volcengine  # 启用真实 AI
+```
+
+### 3. 启动后端
+
+```bash
+cd backend
+mvn compile spring-boot:run
+# 服务运行在 http://localhost:8080
+# Swagger 文档: http://localhost:8080/swagger-ui.html
+# 健康检查: http://localhost:8080/health
+```
+
+### 4. 启动前端
+
+```bash
+cd frontend
+cp .env.example .env.development
+npm install
+npm run dev
+# 开发服务器运行在 http://localhost:5173
 ```
 
 ---
 
-## 🔧 环境变量
+## API 文档
 
-| 变量 | 说明 | 开发环境 | 生产环境 |
-|------|------|----------|----------|
-| `VITE_API_BASE_URL` | API 基础地址 | `http://localhost:8080` | `/api` |
-| `VITE_APP_TITLE` | 应用名称 | `AI 视觉对话助手` | 同 |
-| `VITE_APP_ENV` | 运行环境 | `development` | `production` |
+所有接口统一返回格式：
 
-> 复制 `.env.example` → `.env.development` / `.env.production` 进行配置
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": { ... },
+  "timestamp": 1712345678000
+}
+```
 
----
+### 对话服务 `/api/chat`
 
-## 🌐 浏览器兼容性
+| 方法 | 路径 | 说明 | 请求体 |
+|------|------|------|--------|
+| POST | `/send` | 普通对话 | `{sessionId, message, images?, frameBase64?}` |
+| POST | `/stream` | 流式对话（SSE） | 同上 |
+| POST | `/correct` | ASR 纠错 | `{text}` |
 
-| 浏览器 | 最低版本 |
-|--------|----------|
-| Chrome | 90+ |
-| Edge | 90+ |
-| Firefox | 90+ |
-| Safari | 15+ |
+**流式响应格式（SSE）：**
 
-> 需要浏览器支持 `navigator.mediaDevices.getUserMedia` (HTTPS 或 localhost)
+```
+event:token
+data:你
 
----
+event:token
+data:好
 
-## 📖 常见问题
+event:done
+data:
+```
 
-### Q: 摄像头无法开启？
-A: 检查浏览器地址栏左侧权限设置，确保已允许摄像头和麦克风访问。需使用 HTTPS 或 localhost。
+### 视觉服务 `/api/vision`
 
-### Q: 构建报错 "baseUrl is deprecated"？
-A: 已通过 `tsconfig.app.json` 的 `ignoreDeprecations: "6.0"` 处理。
+| 方法 | 路径 | 说明 | 请求体 |
+|------|------|------|--------|
+| POST | `/upload` | 上传图片（MultipartFile） | FormData `file` |
+| POST | `/analyze` | 分析 base64 图片 | `{imageBase64, prompt}` |
 
-### Q: 如何切换后端 API 地址？
-A: 修改 `.env.development` 中的 `VITE_API_BASE_URL` 后重启 dev server。
+### 语音服务 `/api/audio`
 
----
+| 方法 | 路径 | 说明 | 请求体 |
+|------|------|------|--------|
+| POST | `/asr` | 语音转文字 | FormData `audio` |
+| POST | `/tts` | 文字转语音 | `{text}` |
 
-## 👥 团队分工
+### 健康检查
 
-| 成员 | 角色 | 负责 |
+| 方法 | 路径 | 返回 |
 |------|------|------|
-| 王子恒 | Frontend Lead | PR2/PR4/PR7/PR8/PR9/PR11(前端)/PR12(前端文档) |
-| 成员B | Backend Lead | PR1/PR3/PR5/PR6/PR10/PR11(后端)/PR12(后端文档) |
+| GET | `/health` | `{"data":{"status":"UP"}}` |
 
 ---
 
-## 📄 License
+## 配置说明
+
+### 后端 `application.yml`
+
+```yaml
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/ai_vision_assistant
+    username: root
+    password: your_password
+  redis:
+    host: localhost
+    port: 6379
+
+# AI Provider 选择（mock / volcengine）
+ai:
+  vision-provider: volcengine   # 视觉模型
+  asr-provider: mock            # 语音识别（前端用浏览器 API）
+  tts-provider: mock            # 语音合成（前端用浏览器 API）
+
+# 火山引擎 Ark 配置
+volcengine:
+  ark:
+    base-url: https://ark.cn-beijing.volces.com/api/v3
+    model: doubao-seed-2-0-lite-260215
+    api-key: your_api_key
+
+# 对话配置
+chat:
+  max-round: 20           # 最大保留轮数
+  summary-trigger: 16     # 触发摘要压缩的轮数
+  summary-keep-rounds: 10 # 压缩后保留最近轮数
+
+# 限流配置
+rate-limit:
+  max-requests: 20        # 窗口内最大请求数
+  window-seconds: 60      # 时间窗口（秒）
+```
+
+### 前端环境变量
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `VITE_API_BASE_URL` | 后端地址 | `http://localhost:8080` |
+| `VITE_APP_TITLE` | 页面标题 | `AI 视觉对话助手` |
+| `VITE_APP_ENV` | 环境标识 | `development` |
+
+> 前端无需配置任何 API Key，所有 AI 调用统一走后端。
+
+---
+
+## Provider 模式
+
+项目采用 **Provider 接口模式**，通过 `@ConditionalOnProperty` 实现厂商中立切换：
+
+```
+                   ┌─ VisionModelProvider
+                   │   ├── MockVisionProvider       (mock)
+                   │   └── VolcengineVisionProvider (volcengine)
+                   │
+Provider Interface ─┼─ AsrProvider
+                   │   ├── MockAsrProvider          (mock)
+                   │   └── VolcengineAsrProvider    (volcengine, 待接入)
+                   │
+                   └─ TtsProvider
+                       ├── MockTtsProvider          (mock)
+                       └── VolcengineTtsProvider    (volcengine, 待接入)
+```
+
+切换方式：修改 `application.yml` 中 `ai.*-provider` 的值即可，无需改代码。
+
+---
+
+## 核心流程
+
+### 对话流程（流式）
+
+```
+用户输入文字 + 可选中途帧
+  → POST /api/chat/stream (SSE)
+  → Volcengine Ark API (stream: true, thinking: disabled)
+  → 逐 token 解析 SSE → SseEmitter 推送到前端
+  → 前端逐字渲染到消息气泡
+  → 完成后 TTS 朗读 + 检测触发词启动主动监控
+```
+
+### 主动视觉监控
+
+```
+用户说含关键词的话（看/盯/监控/消失/注意...）
+  → useActiveVision.startWatching()
+  → 立刻拍照 → POST /api/vision/analyze → AI 分析
+  → 每 10s 重复：拍照 → 分析 → 有变化就播报
+```
+
+### ASR 纠错流程
+
+```
+用户语音输入 → 浏览器 Web Speech API 识别
+  → POST /api/chat/correct
+  → AI 纠正错别字 → 返回纠正后文本
+  → 自动填入输入框并发送
+```
+
+---
+
+## 安全
+
+- **API Key 保护**：所有火山引擎 Key 仅存在于后端 `application.yml`（gitignored），前端零 Key
+- **限流**：Redis 原子计数器，60s 窗口最多 20 请求
+- **Prompt 注入防护**：ASR 纠错输入截断 500 字符、过滤换行
+- **文件上传校验**：限制 10MB + 仅允许 `image/*` 类型
+- **CORS**：开发环境允许所有来源（生产需收紧）
+
+---
+
+## 团队
+
+| 成员 | 角色 | 分工 |
+|------|------|------|
+| 王子恒 | Frontend Lead | 前端架构、UI 组件、动画、composables |
+| 徐嘉祥 | Backend Lead | 后端架构、Provider、AI 集成、安全 |
+
+---
+
+## License
 
 MIT

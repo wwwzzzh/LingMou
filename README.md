@@ -1,5 +1,7 @@
 # 🫁 灵眸 AI（LingMou）— 智能视觉对话助手
 
+> 📺 **演示视频**：[Bilibili 观看](https://www.bilibili.com/video/BV1DvJA6yEjn/)
+
 基于火山引擎豆包大模型的实时多模态视觉语音助手。摄像头画面实时理解 + 语音对话 + AI 主动监控，让 AI "看懂"你的世界。
 
 ---

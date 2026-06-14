@@ -8,7 +8,7 @@ import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useSpeechSynthesis } from '@/composables/useSpeechSynthesis'
 import { useActiveVision } from '@/composables/useActiveVision'
 import chatApi from '@/api/modules/chat'
-import { generateId, formatTime, cleanTtsText } from '@/utils'
+import { generateId, formatTime } from '@/utils'
 import type { ChatMessage } from '@/types'
 
 // ==================== Stores ====================
@@ -93,7 +93,8 @@ function handleVisionObservation(observation: string): void {
   chatStore.addMessage(msg)
   scrollToBottom()
   if (tts.isSupported.value) {
-    tts.speak(cleanTtsText(observation))
+    const cleanText = observation.replace(/[\u{1F600}-\u{1F9FF}]|[\u{2600}-\u{27BF}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1FA00}-\u{1FA6F}]|[\u{1FA70}-\u{1FAFF}]|[\u{2700}-\u{27BF}]|[\u{FE00}-\u{FE0F}]|[\u{200D}]/gu, '')
+    tts.speak(cleanText || observation)
   }
 }
 
@@ -122,17 +123,17 @@ watch(() => asr.isListening.value, async (listening, wasListening) => {
     const rawText = inputText.value.trim()
     if (!rawText) return
 
-	    // ASR 纠错（1.5s 超时，避免阻塞）
+	    // 调后端 ASR 纠错
 	    systemStatus.value = 'recognizing'
 	    try {
-	      const corrected = await Promise.race([
-	        chatApi.correctAsr(rawText).then(r => r.data?.corrected || ''),
-	        new Promise<string>(resolve => setTimeout(() => resolve(''), 1500)),
-	      ])
-	      if (corrected && corrected !== rawText) {
-	        inputText.value = corrected
+	      const res = await chatApi.correctAsr(rawText)
+	      if (res.code === 200 && res.data?.corrected) {
+	        const corrected = res.data.corrected
+	        if (corrected !== rawText) {
+	          inputText.value = corrected
+	        }
 	      }
-	    } catch { /* 超时或失败，直接用原文 */ }
+	    } catch { /* 纠错失败继续用原文 */ }
 
     voiceAccumulator.value = inputText.value
     systemStatus.value = 'idle'
@@ -243,7 +244,8 @@ async function handleSend(): Promise<void> {
 
     // 3. TTS 语音播报（过滤表情符号）
     if (tts.isSupported.value) {
-      tts.speak(cleanTtsText(replyText))
+      const cleanText = replyText.replace(/[\u{1F600}-\u{1F9FF}]|[\u{2600}-\u{27BF}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1FA00}-\u{1FA6F}]|[\u{1FA70}-\u{1FAFF}]|[\u{2700}-\u{27BF}]|[\u{FE00}-\u{FE0F}]|[\u{200D}]/gu, '')
+      tts.speak(cleanText || replyText)
     }
 
     // 4. 模糊检测用户是否发出"监控"指令 → 启动主动视觉

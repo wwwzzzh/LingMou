@@ -1,13 +1,10 @@
 import { ref, type Ref } from 'vue'
+import request from '@/api/request'
 import { calculateChangeRate } from '@/utils/motionDetector'
 
-const ARK_API_KEY = import.meta.env.VITE_ARK_API_KEY
-const ARK_URL = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions'
-const MODEL = 'doubao-1-5-vision-pro-32k-250115'
-
-const CHANGE_THRESHOLD = 0.15   // 变化率阈值
-const DETECT_INTERVAL = 800     // 检测间隔 0.8s，接近实时
-const COOLDOWN_MS = 20000       // 变化稳定后冷却 20s
+const CHANGE_THRESHOLD = 0.15
+const DETECT_INTERVAL = 800
+const COOLDOWN_MS = 20000
 
 export function useActiveVision(
   videoRef: Ref<HTMLVideoElement | null>,
@@ -21,7 +18,7 @@ export function useActiveVision(
   let previousPixels: Uint8ClampedArray | null = null
   let onChangeCallback: ((text: string) => void) | null = null
   let lastReportTime = 0
-  let pending = false // 防止并发
+  let pending = false
 
   function getPixelData(): Uint8ClampedArray | null {
     const video = videoRef.value
@@ -49,7 +46,6 @@ export function useActiveVision(
   }
 
   async function analyzeChange(frameBase64: string, context: string, lastObs: string): Promise<string> {
-    // 告诉 AI 不要重复上一次的观察
     const repeatHint = lastObs
       ? `（注意：你上一次观察到"${lastObs}"，如果画面没有新的变化，请不要重复相同的结论）`
       : ''
@@ -58,27 +54,13 @@ export function useActiveVision(
       ? `你在持续监控一个场景。${repeatHint}\n用户之前说："${context}"。\n现在画面可能发生了变化，请用中文简洁描述你注意到的不同之处（1句话即可）。如果画面和之前差不多，请回复"无明显变化"。`
       : `你在持续监控一个场景。${repeatHint}\n如果画面发生了明显变化，请用中文简洁描述（1句话）。如果没有明显变化，请只回复"无明显变化"。`
 
-    const contentParts: any[] = [
-      { type: 'image_url', image_url: { url: frameBase64 } },
-      { type: 'text', text: prompt },
-    ]
-
     try {
-      const response = await fetch(ARK_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${ARK_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: MODEL,
-          messages: [{ role: 'user', content: contentParts }],
-          max_tokens: 200,
-        }),
+      const res = await request.post('/api/vision/analyze', {
+        imageBase64: frameBase64,
+        prompt,
       })
-      if (response.ok) {
-        const data = await response.json()
-        return data.choices?.[0]?.message?.content || ''
+      if (res.code === 200) {
+        return res.data.reply || ''
       }
     } catch { /* ignore */ }
     return ''
@@ -87,7 +69,6 @@ export function useActiveVision(
   async function detectLoop(): Promise<void> {
     if (!isWatching.value || !cameraEnabled.value || pending) return
 
-    // 冷却中 → 静默更新参考帧，不触发报告
     const inCooldown = Date.now() - lastReportTime < COOLDOWN_MS
 
     const pixels = getPixelData()
@@ -108,16 +89,13 @@ export function useActiveVision(
               onChangeCallback?.(result)
             }
           }
-          // 更新参考帧（以当前画面为新的基准）
           previousPixels = pixels
         } finally {
           pending = false
         }
       } else if (changeRate > 0.05) {
-        // 有小变化但在阈值以下 → 静默更新参考
         previousPixels = pixels
       }
-      // 变化极小 → 不更新（避免噪声漂移）
     } else {
       previousPixels = pixels
     }
@@ -132,7 +110,6 @@ export function useActiveVision(
     lastObservation.value = ''
     pending = false
     if (intervalId) clearInterval(intervalId)
-    // 立刻抓取参考帧，然后高频检测
     detectLoop()
     intervalId = setInterval(detectLoop, DETECT_INTERVAL)
   }

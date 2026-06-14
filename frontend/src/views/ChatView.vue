@@ -7,7 +7,7 @@ import { useMediaDevice } from '@/composables/useMediaDevice'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useSpeechSynthesis } from '@/composables/useSpeechSynthesis'
 import { useActiveVision } from '@/composables/useActiveVision'
-import { mockChatReply } from '@/api/modules/chat.mock'
+import chatApi from '@/api/modules/chat'
 import { generateId, formatTime } from '@/utils'
 import type { ChatMessage } from '@/types'
 
@@ -123,32 +123,17 @@ watch(() => asr.isListening.value, async (listening, wasListening) => {
     const rawText = inputText.value.trim()
     if (!rawText) return
 
-    // 用 AI 快速纠正 ASR 识别错误
-    systemStatus.value = 'recognizing'
-    try {
-      const resp = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_ARK_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'doubao-seed-2-0-pro-260215',
-          messages: [{
-            role: 'user',
-            content: `请纠正以下语音识别结果中的错别字，只输出纠正后的文本，不要加任何解释：\n"${rawText}"`
-          }],
-          max_tokens: 100,
-        }),
-      })
-      if (resp.ok) {
-        const data = await resp.json()
-        const corrected = data.choices?.[0]?.message?.content?.trim()
-        if (corrected && corrected !== rawText) {
-          inputText.value = corrected.replace(/^["']|["']$/g, '') // 去掉引号
-        }
-      }
-    } catch { /* 纠错失败继续用原文 */ }
+	    // 调后端 ASR 纠错
+	    systemStatus.value = 'recognizing'
+	    try {
+	      const res = await chatApi.correctAsr(rawText)
+	      if (res.code === 200 && res.data?.corrected) {
+	        const corrected = res.data.corrected
+	        if (corrected !== rawText) {
+	          inputText.value = corrected
+	        }
+	      }
+	    } catch { /* 纠错失败继续用原文 */ }
 
     voiceAccumulator.value = inputText.value
     systemStatus.value = 'idle'
@@ -216,53 +201,33 @@ async function handleSend(): Promise<void> {
     } catch { /* 截图失败不影响 */ }
   }
 
-  // 调用火山引擎 Ark API（多模态：图片 + 文字）
+  // 调用后端 API（多模态：图片 + 文字）
   systemStatus.value = 'thinking'
   chatStore.setLoading(true)
 
-  const ARK_API_KEY = import.meta.env.VITE_ARK_API_KEY
-  const ARK_URL = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions'
-  const MODEL = 'doubao-1-5-vision-pro-32k-250115'
-
   let replyText = ''
 
-  // 构建多模态消息
-  const contentParts: any[] = []
-  if (frameBase64) {
-    contentParts.push({
-      type: 'image_url',
-      image_url: { url: frameBase64 },
-    })
+  const sessionId = userStore.sessionId || 'session-' + Date.now()
+  if (!userStore.sessionId) {
+    userStore.setSessionId(sessionId)
   }
-  contentParts.push({ type: 'text', text })
 
   try {
-    const response = await fetch(ARK_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${ARK_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          { role: 'user', content: contentParts },
-        ],
-        max_tokens: 1024,
-      }),
+    const res = await chatApi.sendMessage({
+      sessionId,
+      message: text,
+      images: [],
+      frameBase64: frameBase64 || undefined,
     })
-
-    if (response.ok) {
-      const data = await response.json()
-      replyText = data.choices?.[0]?.message?.content || ''
+    if (res.code === 200 && res.data?.reply) {
+      replyText = res.data.reply
     }
   } catch {
-    // 网络不通 → 降级 Mock
+    // 网络不通 → 降级提示
   }
 
   if (!replyText) {
-    const mockMsg = await mockChatReply(userStore.sessionId || 'anonymous', text, [])
-    replyText = mockMsg.content
+    replyText = '抱歉，AI 服务暂时不可用，请稍后重试。'
   }
 
   if (replyText) {

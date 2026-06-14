@@ -2,6 +2,7 @@ package com.lingmou.controller;
 
 import com.lingmou.common.Result;
 import com.lingmou.dto.ChatRequest;
+import com.lingmou.dto.CorrectRequest;
 import com.lingmou.entity.ChatHistory;
 import com.lingmou.provider.VisionModelProvider;
 import com.lingmou.service.ChatSessionService;
@@ -40,6 +41,15 @@ public class ChatController {
         String message = request.getMessage();
         List<String> images = request.getImages();
 
+        // 如果前端传了 base64 帧数据，追加到 images 列表中
+        String frameBase64 = request.getFrameBase64();
+        if (frameBase64 != null && !frameBase64.isBlank()) {
+            if (images == null) {
+                images = new java.util.ArrayList<>();
+            }
+            images.add(frameBase64);
+        }
+
         List<ChatHistory> histories = sessionService.getHistory(sessionId);
         String reply = visionProvider.chat(sessionId, message, images, histories);
 
@@ -48,5 +58,12 @@ public class ChatController {
 
         log.info("Chat: sessionId={}, reply length={}", sessionId, reply.length());
         return Result.success(Map.of("reply", reply));
+    }
+
+    @Operation(summary = "ASR 语音识别纠错")
+    @PostMapping("/correct")
+    public Result<Map<String, String>> correct(@Valid @RequestBody CorrectRequest request) {
+        String corrected = visionProvider.correctAsr(request.getText());
+        return Result.success(Map.of("corrected", corrected));
     }
 }

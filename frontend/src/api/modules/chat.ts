@@ -11,6 +11,8 @@ export interface SendMessageParams {
   message: string
   /** 附带图片 URL 列表 */
   images: string[]
+  /** 摄像头帧 base64（可选） */
+  frameBase64?: string
 }
 
 /**
@@ -31,6 +33,14 @@ const chatApi = {
    */
   sendMessage(params: SendMessageParams): Promise<ApiResult<SendMessageResult>> {
     return request.post('/api/chat/send', params)
+  },
+
+  /**
+   * POST /api/chat/correct
+   * ASR 语音识别纠错
+   */
+  correctAsr(text: string): Promise<ApiResult<{ corrected: string }>> {
+    return request.post('/api/chat/correct', { text })
   },
 }
 

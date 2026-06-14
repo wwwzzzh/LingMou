@@ -21,4 +21,16 @@ public class MockVisionProvider implements VisionModelProvider {
                 histories != null ? histories.size() : 0);
         return "[Mock Vision] 模拟多模态回复: 已收到你的问题「" + prompt + "」";
     }
+
+    @Override
+    public String analyze(String imageBase64, String prompt) {
+        log.info("Mock Vision analyze: prompt={}, imageSize={}", prompt, imageBase64.length());
+        return "[Mock] 画面分析: " + prompt;
+    }
+
+    @Override
+    public String correctAsr(String rawText) {
+        log.info("Mock ASR correct: {}", rawText);
+        return rawText;
+    }
 }

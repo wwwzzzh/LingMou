@@ -13,6 +13,8 @@ public class ChatRequest {
 
     private List<String> images;
 
+    private String frameBase64;
+
     public String getSessionId() {
         return sessionId;
     }
@@ -35,5 +37,13 @@ public class ChatRequest {
 
     public void setImages(List<String> images) {
         this.images = images;
+    }
+
+    public String getFrameBase64() {
+        return frameBase64;
+    }
+
+    public void setFrameBase64(String frameBase64) {
+        this.frameBase64 = frameBase64;
     }
 }

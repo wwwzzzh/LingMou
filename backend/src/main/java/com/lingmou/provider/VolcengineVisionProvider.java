@@ -119,4 +119,108 @@ public class VolcengineVisionProvider implements VisionModelProvider {
             return "抱歉，AI 服务调用失败: " + e.getMessage();
         }
     }
+
+    @Override
+    public String analyze(String imageBase64, String prompt) {
+        try {
+            List<Map<String, Object>> contentParts = new ArrayList<>();
+            contentParts.add(Map.of(
+                    "type", "image_url",
+                    "image_url", Map.of("url", imageBase64)
+            ));
+            contentParts.add(Map.of("type", "text", "text", prompt));
+
+            Map<String, Object> message = new HashMap<>();
+            message.put("role", "user");
+            message.put("content", contentParts);
+
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("model", modelName);
+            requestBody.put("messages", List.of(message));
+            requestBody.put("max_tokens", 256);
+
+            String json = objectMapper.writeValueAsString(requestBody);
+            log.info("Volcengine Vision analyze: prompt={}, imageSize={}", prompt, imageBase64.length());
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(baseUrl + "/chat/completions"))
+                    .header("Authorization", "Bearer " + apiKey)
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(30))
+                    .POST(HttpRequest.BodyPublishers.ofString(json))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() != 200) {
+                log.error("Volcengine API error: status={}", response.statusCode());
+                return "";
+            }
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> result = objectMapper.readValue(response.body(), Map.class);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> choices = (List<Map<String, Object>>) result.get("choices");
+            if (choices != null && !choices.isEmpty()) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> msg = (Map<String, Object>) choices.get(0).get("message");
+                String reply = (String) msg.get("content");
+                log.info("Volcengine Vision analyze reply: {} chars", reply != null ? reply.length() : 0);
+                return reply != null ? reply : "";
+            }
+            return "";
+        } catch (IOException | InterruptedException e) {
+            log.error("Volcengine Vision analyze failed", e);
+            return "";
+        }
+    }
+
+    @Override
+    public String correctAsr(String rawText) {
+        try {
+            Map<String, Object> message = Map.of("role", "user", "content",
+                    "请纠正以下语音识别结果中的错别字，只输出纠正后的文本，不要加任何解释：\n\"" + rawText + "\"");
+
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("model", modelName);
+            requestBody.put("messages", List.of(message));
+            requestBody.put("max_tokens", 200);
+
+            String json = objectMapper.writeValueAsString(requestBody);
+            log.info("Volcengine ASR correct: {} chars", rawText.length());
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(baseUrl + "/chat/completions"))
+                    .header("Authorization", "Bearer " + apiKey)
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(15))
+                    .POST(HttpRequest.BodyPublishers.ofString(json))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() != 200) {
+                log.error("Volcengine ASR correct error: status={}", response.statusCode());
+                return rawText;
+            }
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> result = objectMapper.readValue(response.body(), Map.class);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> choices = (List<Map<String, Object>>) result.get("choices");
+            if (choices != null && !choices.isEmpty()) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> msg = (Map<String, Object>) choices.get(0).get("message");
+                String corrected = (String) msg.get("content");
+                if (corrected != null) {
+                    corrected = corrected.trim().replaceAll("^[\"']|[\"']$", "");
+                    return corrected;
+                }
+            }
+            return rawText;
+        } catch (IOException | InterruptedException e) {
+            log.error("Volcengine ASR correct failed", e);
+            return rawText;
+        }
+    }
 }

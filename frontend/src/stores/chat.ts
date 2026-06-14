@@ -30,6 +30,16 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   /**
+   * 更新指定消息的字段（用于流式输出）
+   */
+  function updateMessage(id: string, patch: Partial<ChatMessage>): void {
+    const idx = messages.value.findIndex(m => m.id === id)
+    if (idx !== -1) {
+      messages.value[idx] = { ...messages.value[idx], ...patch }
+    }
+  }
+
+  /**
    * 清空消息列表
    */
   function clearMessages(): void {
@@ -40,6 +50,7 @@ export const useChatStore = defineStore('chat', () => {
     messages,
     isLoading,
     addMessage,
+    updateMessage,
     setLoading,
     clearMessages,
   }

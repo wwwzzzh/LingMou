@@ -201,69 +201,73 @@ async function handleSend(): Promise<void> {
     } catch { /* 截图失败不影响 */ }
   }
 
-  // 调用后端 API（多模态：图片 + 文字）
+  // 调用后端流式 API（多模态：图片 + 文字）
   systemStatus.value = 'thinking'
   chatStore.setLoading(true)
-
-  let replyText = ''
 
   const sessionId = userStore.sessionId || 'session-' + Date.now()
   if (!userStore.sessionId) {
     userStore.setSessionId(sessionId)
   }
 
-  try {
-    const res = await chatApi.sendMessage({
-      sessionId,
-      message: text,
-      images: [],
-      frameBase64: frameBase64 || undefined,
-    })
-    if (res.code === 200 && res.data?.reply) {
-      replyText = res.data.reply
-    }
-  } catch {
-    // 网络不通 → 降级提示
+  // 先创建空消息占位，逐 token 填充
+  const aiMessageId = generateId()
+  const aiMessage: ChatMessage = {
+    id: aiMessageId,
+    role: 'assistant',
+    content: '',
+    type: 'text',
+    timestamp: Date.now(),
   }
+  chatStore.addMessage(aiMessage)
+  chatStore.setLoading(false)
+  await scrollToBottom()
 
-  if (!replyText) {
-    replyText = '抱歉，AI 服务暂时不可用，请稍后重试。'
-  }
+  let replyText = ''
 
-  if (replyText) {
-    systemStatus.value = 'replying'
-    const aiMessage: ChatMessage = {
-      id: generateId(),
-      role: 'assistant',
-      content: replyText,
-      type: 'text',
-      timestamp: Date.now(),
-    }
-    chatStore.addMessage(aiMessage)
-    await scrollToBottom()
-
-    // 3. TTS 语音播报（过滤表情符号）
-    if (tts.isSupported.value) {
-      const cleanText = replyText.replace(/[\u{1F600}-\u{1F9FF}]|[\u{2600}-\u{27BF}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1FA00}-\u{1FA6F}]|[\u{1FA70}-\u{1FAFF}]|[\u{2700}-\u{27BF}]|[\u{FE00}-\u{FE0F}]|[\u{200D}]/gu, '')
-      tts.speak(cleanText || replyText)
-    }
-
-    // 4. 模糊检测用户是否发出"监控"指令 → 启动主动视觉
-    const watchPatterns = ['看', '盯', '监控', '注意', '留意', '观察', '消失', '守着', '不见了', '还在吗', '有没有']
-    const shouldWatch = watchPatterns.some(k => text.includes(k))
-    if (shouldWatch && cameraEnabled.value) {
-      activeVision.startWatching(text, handleVisionObservation)
-      chatStore.addMessage({
-        id: generateId(),
-        role: 'assistant',
-        content: '👁️ 已开始主动监控画面变化，我会在发现异常时通知你。',
-        type: 'text',
-        timestamp: Date.now(),
-      })
+  await chatApi.sendMessageStream(
+    { sessionId, message: text, images: [], frameBase64: frameBase64 || undefined },
+    // onToken: 逐字追加
+    (token: string) => {
+      replyText += token
+      chatStore.updateMessage(aiMessageId, { content: replyText })
+    },
+    // onDone
+    async () => {
+      systemStatus.value = 'idle'
+      if (!replyText) {
+        chatStore.updateMessage(aiMessageId, { content: '抱歉，AI 服务暂时不可用。' })
+        return
+      }
       await scrollToBottom()
-    }
-  }
 
+      if (tts.isSupported.value) {
+        const cleanText = replyText.replace(/[\u{1F600}-\u{1F9FF}]|[\u{2600}-\u{27BF}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1FA00}-\u{1FA6F}]|[\u{1FA70}-\u{1FAFF}]|[\u{2700}-\u{27BF}]|[\u{FE00}-\u{FE0F}]|[\u{200D}]/gu, '')
+        tts.speak(cleanText || replyText)
+      }
+
+      const watchPatterns = ['看', '盯', '监控', '注意', '留意', '观察', '消失', '守着', '不见了', '还在吗', '有没有']
+      if (watchPatterns.some(k => text.includes(k)) && cameraEnabled.value) {
+        const wasAlreadyWatching = activeVision.isWatching.value
+        activeVision.startWatching(text, handleVisionObservation)
+        if (!wasAlreadyWatching) {
+          chatStore.addMessage({
+            id: generateId(),
+            role: 'assistant',
+            content: '👁️ 已开始主动监控画面变化，我会在发现异常时通知你。',
+            type: 'text',
+            timestamp: Date.now(),
+          })
+          await scrollToBottom()
+        }
+      }
+    },
+    // onError
+    (_err: string) => {
+      systemStatus.value = 'idle'
+      chatStore.updateMessage(aiMessageId, { content: '抱歉，AI 服务暂时不可用。' })
+    },
+  )
   chatStore.setLoading(false)
   systemStatus.value = 'idle'
   await scrollToBottom()

@@ -8,7 +8,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -87,6 +89,7 @@ public class VolcengineVisionProvider implements VisionModelProvider {
             requestBody.put("model", modelName);
             requestBody.put("messages", messages);
             requestBody.put("max_tokens", 1024);
+            requestBody.put("thinking", Map.of("type", "disabled"));
 
             String json = objectMapper.writeValueAsString(requestBody);
             log.info("Volcengine Vision: sessionId={}, prompt={}, images={}, historyRounds={}",
@@ -124,6 +127,63 @@ public class VolcengineVisionProvider implements VisionModelProvider {
             log.error("Volcengine Vision call failed", e);
             return "抱歉，AI 服务调用失败: " + e.getMessage();
         }
+    }
+
+    @Override
+    public BufferedReader chatStream(String sessionId, String prompt, List<String> imageUrls,
+                                      List<ChatHistory> histories) throws IOException, InterruptedException {
+        List<Map<String, Object>> messages = new ArrayList<>();
+
+        messages.add(Map.of("role", "system", "content",
+                "你是灵眸AI，一个由字节跳动豆包大模型驱动的智能视觉对话助手。" +
+                "你可以看到用户摄像头画面并回答问题。请用中文回复，语气友好简洁。" +
+                "当用户问你是谁或你的身份时，告诉他们你是灵眸AI。"));
+
+        for (ChatHistory h : histories) {
+            messages.add(Map.of("role", h.getRole(), "content", h.getContent()));
+        }
+
+        List<Map<String, Object>> contentParts = new ArrayList<>();
+        if (imageUrls != null) {
+            for (String url : imageUrls) {
+                contentParts.add(Map.of("type", "image_url", "image_url", Map.of("url", url)));
+            }
+        }
+        contentParts.add(Map.of("type", "text", "text", prompt));
+
+        Map<String, Object> userMessage = new HashMap<>();
+        userMessage.put("role", "user");
+        userMessage.put("content", contentParts);
+        messages.add(userMessage);
+
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("model", modelName);
+        requestBody.put("messages", messages);
+        requestBody.put("max_tokens", 1024);
+        requestBody.put("stream", true);
+        requestBody.put("thinking", Map.of("type", "disabled"));
+
+        String json = objectMapper.writeValueAsString(requestBody);
+        log.info("Volcengine Stream: sessionId={}, prompt={}, images={}, historyRounds={}",
+                sessionId, prompt, imageUrls != null ? imageUrls.size() : 0, histories.size());
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/chat/completions"))
+                .header("Authorization", "Bearer " + apiKey)
+                .header("Content-Type", "application/json")
+                .timeout(Duration.ofSeconds(60))
+                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+
+        HttpResponse<java.io.InputStream> response = httpClient.send(request,
+                HttpResponse.BodyHandlers.ofInputStream());
+
+        if (response.statusCode() != 200) {
+            log.error("Volcengine Stream error: status={}", response.statusCode());
+            return null;
+        }
+
+        return new BufferedReader(new InputStreamReader(response.body()));
     }
 
     @Override

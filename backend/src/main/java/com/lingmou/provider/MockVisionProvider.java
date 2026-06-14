@@ -6,6 +6,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
+import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @Component
@@ -32,5 +37,13 @@ public class MockVisionProvider implements VisionModelProvider {
     public String correctAsr(String rawText) {
         log.info("Mock ASR correct: {}", rawText);
         return rawText;
+    }
+
+    @Override
+    public BufferedReader chatStream(String sessionId, String prompt, List<String> imageUrls,
+                                      List<ChatHistory> histories) throws IOException {
+        String mockSse = "data: {\"choices\":[{\"delta\":{\"content\":\"[Mock 流式] 收到问题：「" + prompt + "」\"}}]}\n\ndata: [DONE]\n";
+        return new BufferedReader(new InputStreamReader(
+                new ByteArrayInputStream(mockSse.getBytes(StandardCharsets.UTF_8))));
     }
 }

@@ -21,6 +21,9 @@ application-*.yml
 # Logs
 *.log
 
+# Redis
+dump.rdb
+
 # OS
 .DS_Store
 Thumbs.db

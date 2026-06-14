@@ -3,16 +3,17 @@ import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { VideoPause, VideoPlay, Microphone, Promotion } from '@element-plus/icons-vue'
 import { useChatStore } from '@/stores/chat'
 import { useUserStore } from '@/stores/user'
-import { useAppStore } from '@/stores/app'
 import { useMediaDevice } from '@/composables/useMediaDevice'
-import { generateId, formatTime } from '@/utils'
+import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
+import { useSpeechSynthesis } from '@/composables/useSpeechSynthesis'
+import { useActiveVision } from '@/composables/useActiveVision'
 import { mockChatReply } from '@/api/modules/chat.mock'
+import { generateId, formatTime } from '@/utils'
 import type { ChatMessage } from '@/types'
 
 // ==================== Stores ====================
 const chatStore = useChatStore()
 const userStore = useUserStore()
-const appStore = useAppStore()
 
 // ==================== 媒体设备 ====================
 const {
@@ -72,6 +73,91 @@ function handleVideoPointerLeave(): void {
   edgeProximity.value = 0
 }
 
+// ==================== ASR & TTS ====================
+const asr = useSpeechRecognition()
+const tts = useSpeechSynthesis()
+const voiceAccumulator = ref('')
+
+// ==================== 主动视觉监控 ====================
+const activeVision = useActiveVision(videoRef, cameraEnabled)
+
+// 监控到变化时 → 自动添加消息 + TTS 播报
+function handleVisionObservation(observation: string): void {
+  const msg: ChatMessage = {
+    id: generateId(),
+    role: 'assistant',
+    content: `👀 ${observation}`,
+    type: 'text',
+    timestamp: Date.now(),
+  }
+  chatStore.addMessage(msg)
+  scrollToBottom()
+  if (tts.isSupported.value) {
+    const cleanText = observation.replace(/[\u{1F600}-\u{1F9FF}]|[\u{2600}-\u{27BF}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1FA00}-\u{1FA6F}]|[\u{1FA70}-\u{1FAFF}]|[\u{2700}-\u{27BF}]|[\u{FE00}-\u{FE0F}]|[\u{200D}]/gu, '')
+    tts.speak(cleanText || observation)
+  }
+}
+
+// 语音识别按钮：点击开始/停止
+function handleVoiceToggle(): void {
+  if (asr.isListening.value) {
+    asr.stop()
+    systemStatus.value = 'idle'
+  } else {
+    voiceAccumulator.value = ''
+    asr.start()
+    systemStatus.value = 'listening'
+  }
+}
+
+// ASR 结果：追加写入输入框（不覆盖）
+watch(() => asr.transcript.value, (val) => {
+  if (val) {
+    inputText.value = voiceAccumulator.value ? voiceAccumulator.value + val : val
+  }
+})
+
+// ASR 停止时 → AI 纠错 → 自动发送
+watch(() => asr.isListening.value, async (listening, wasListening) => {
+  if (wasListening && !listening) {
+    const rawText = inputText.value.trim()
+    if (!rawText) return
+
+    // 用 AI 快速纠正 ASR 识别错误
+    systemStatus.value = 'recognizing'
+    try {
+      const resp = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_ARK_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'doubao-seed-2-0-pro-260215',
+          messages: [{
+            role: 'user',
+            content: `请纠正以下语音识别结果中的错别字，只输出纠正后的文本，不要加任何解释：\n"${rawText}"`
+          }],
+          max_tokens: 100,
+        }),
+      })
+      if (resp.ok) {
+        const data = await resp.json()
+        const corrected = data.choices?.[0]?.message?.content?.trim()
+        if (corrected && corrected !== rawText) {
+          inputText.value = corrected.replace(/^["']|["']$/g, '') // 去掉引号
+        }
+      }
+    } catch { /* 纠错失败继续用原文 */ }
+
+    voiceAccumulator.value = inputText.value
+    systemStatus.value = 'idle'
+    if (inputText.value.trim()) {
+      handleSend()
+    }
+  }
+})
+
 // ==================== 聊天 ====================
 const chatContainerRef = ref<HTMLElement | null>(null)
 const inputText = ref('')
@@ -114,30 +200,108 @@ async function handleSend(): Promise<void> {
   inputText.value = ''
   await scrollToBottom()
 
-  // 模拟 ASR → AI 流程
+  // 截取摄像头画面 → base64
+  let frameBase64 = ''
+  if (videoRef.value && cameraEnabled.value) {
+    try {
+      const video = videoRef.value
+      const canvas = document.createElement('canvas')
+      canvas.width = video.videoWidth || 640
+      canvas.height = video.videoHeight || 480
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        frameBase64 = canvas.toDataURL('image/jpeg', 0.7) // data:image/jpeg;base64,...
+      }
+    } catch { /* 截图失败不影响 */ }
+  }
+
+  // 调用火山引擎 Ark API（多模态：图片 + 文字）
   systemStatus.value = 'thinking'
   chatStore.setLoading(true)
-  const doneLoading = appStore.startLoading()
+
+  const ARK_API_KEY = import.meta.env.VITE_ARK_API_KEY
+  const ARK_URL = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions'
+  const MODEL = 'doubao-1-5-vision-pro-32k-250115'
+
+  let replyText = ''
+
+  // 构建多模态消息
+  const contentParts: any[] = []
+  if (frameBase64) {
+    contentParts.push({
+      type: 'image_url',
+      image_url: { url: frameBase64 },
+    })
+  }
+  contentParts.push({ type: 'text', text })
 
   try {
-    const reply = await mockChatReply(userStore.sessionId || 'anonymous', text, [])
-    systemStatus.value = 'replying'
-    await new Promise(r => setTimeout(r, 400)) // 短暂显示"回复中"
-    chatStore.addMessage(reply)
+    const response = await fetch(ARK_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${ARK_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [
+          { role: 'user', content: contentParts },
+        ],
+        max_tokens: 1024,
+      }),
+    })
+
+    if (response.ok) {
+      const data = await response.json()
+      replyText = data.choices?.[0]?.message?.content || ''
+    }
   } catch {
-    chatStore.addMessage({
+    // 网络不通 → 降级 Mock
+  }
+
+  if (!replyText) {
+    const mockMsg = await mockChatReply(userStore.sessionId || 'anonymous', text, [])
+    replyText = mockMsg.content
+  }
+
+  if (replyText) {
+    systemStatus.value = 'replying'
+    const aiMessage: ChatMessage = {
       id: generateId(),
       role: 'assistant',
-      content: '抱歉，回复生成失败，请稍后重试。',
+      content: replyText,
       type: 'text',
       timestamp: Date.now(),
-    })
-  } finally {
-    chatStore.setLoading(false)
-    doneLoading()
-    systemStatus.value = 'idle'
+    }
+    chatStore.addMessage(aiMessage)
     await scrollToBottom()
+
+    // 3. TTS 语音播报（过滤表情符号）
+    if (tts.isSupported.value) {
+      const cleanText = replyText.replace(/[\u{1F600}-\u{1F9FF}]|[\u{2600}-\u{27BF}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1FA00}-\u{1FA6F}]|[\u{1FA70}-\u{1FAFF}]|[\u{2700}-\u{27BF}]|[\u{FE00}-\u{FE0F}]|[\u{200D}]/gu, '')
+      tts.speak(cleanText || replyText)
+    }
+
+    // 4. 模糊检测用户是否发出"监控"指令 → 启动主动视觉
+    const watchPatterns = ['看', '盯', '监控', '注意', '留意', '观察', '消失', '守着', '不见了', '还在吗', '有没有']
+    const shouldWatch = watchPatterns.some(k => text.includes(k))
+    if (shouldWatch && cameraEnabled.value) {
+      activeVision.startWatching(text, handleVisionObservation)
+      chatStore.addMessage({
+        id: generateId(),
+        role: 'assistant',
+        content: '👁️ 已开始主动监控画面变化，我会在发现异常时通知你。',
+        type: 'text',
+        timestamp: Date.now(),
+      })
+      await scrollToBottom()
+    }
   }
+
+  chatStore.setLoading(false)
+  systemStatus.value = 'idle'
+  await scrollToBottom()
 }
 
 function handleKeydown(e: KeyboardEvent): void {
@@ -195,6 +359,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   stopDevice()
+  activeVision.stopWatching()
   if (timeInterval) clearInterval(timeInterval)
   if (statusInterval) clearInterval(statusInterval)
 })
@@ -308,13 +473,27 @@ onBeforeUnmount(() => {
         <span>{{ statusText[systemStatus] }}</span>
       </div>
 
+      <!-- 主动监控状态 -->
+      <div v-if="activeVision.isWatching.value" class="chat-panel__watching">
+        <span class="watching-dot" />
+        <span>👁️ 主动监控中</span>
+        <button class="watching-stop" @click="activeVision.stopWatching()">停止</button>
+      </div>
+
       <!-- 输入区域 -->
       <div class="chat-panel__input-area">
         <div class="chat-input-row">
+          <button
+            class="chat-voice-btn"
+            :class="{ 'is-active': asr.isListening.value }"
+            @click="handleVoiceToggle"
+          >
+            <el-icon :size="18"><Microphone /></el-icon>
+          </button>
           <input
             v-model="inputText"
             class="chat-input-field"
-            placeholder="输入消息..."
+            placeholder="输入消息 或 点击🎙️语音..."
             @keydown="handleKeydown"
           />
           <button class="chat-send-btn" :class="{ 'is-ready': inputText.trim() }" @click="handleSend">
@@ -543,6 +722,14 @@ $accent: #6366f1;
     &.is-active { background: $accent; }
   }
 
+  // 主动监控指示
+  &__watching {
+    padding: 6px 16px;
+    font-size: 11px;
+    color: #22c55e;
+    display: flex; align-items: center; gap: 6px;
+  }
+
   // 输入区
   &__input-area {
     padding: 12px 16px 16px;
@@ -605,6 +792,47 @@ $accent: #6366f1;
 // 输入框
 .chat-input-row {
   display: flex; gap: 8px; align-items: center;
+}
+.chat-voice-btn {
+  width: 38px; height: 38px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  color: rgba(148,163,184,0.6);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  &:hover { background: rgba(255,255,255,0.08); }
+  &.is-active {
+    background: rgba(239,68,68,0.2);
+    border-color: rgba(239,68,68,0.5);
+    color: #ef4444;
+    animation: voicePulse 1.2s ease-in-out infinite;
+  }
+}
+@keyframes voicePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.3); }
+  50% { box-shadow: 0 0 0 8px rgba(239,68,68,0); }
+}
+.watching-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #22c55e;
+  animation: watchingBlink 1s ease-in-out infinite;
+}
+@keyframes watchingBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.watching-stop {
+  margin-left: auto;
+  background: rgba(239,68,68,0.15);
+  border: 1px solid rgba(239,68,68,0.3);
+  color: #ef4444;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 10px;
+  cursor: pointer;
 }
 .chat-input-field {
   flex: 1;
